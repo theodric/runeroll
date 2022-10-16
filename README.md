@@ -7,3 +7,5 @@ Python CLI 9-rune cast tool
 * Eventually with an Urwid TUI
 * Eventually with sick vector graphics
 * Maybe
+
+Anyway, you'll figure it out.
