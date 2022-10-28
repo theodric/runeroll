@@ -1,0 +1,17 @@
+set term xterm
+set border linewidth 2
+set style line 1 linecolor rgb 'blue' linetype 1 linewidth 2
+set style line 2 linecolor rgb 'red' linetype 1 linewidth 2
+
+a = 0.9
+
+f(x) = a*sin(x)
+g(x) = a*cos(x)
+
+plot f(x) title 'ass' with lines linestyle 1,\
+     g(x) title 'ballZ' wine lines linestyle 2
+
+
+
+
+

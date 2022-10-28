@@ -1,0 +1,252 @@
+/* ( default color ) ----------------------------------------------------------
+-----------------------------------------------------------------------------*/
+h1,h2,h3,h4,h5,h6          { color: #000;}
+pre                        { border: 1px solid #eae9e9; background-color: #FFF; -moz-box-shadow: 0 1px 10px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 10px rgba(0,0,0,0.1); box-shadow: 0 1px 10px rgba(0,0,0,0.1);}
+input[type="email"],
+input[type="number"],
+input[type="search"],
+textarea,
+input[type="text"],
+input[type="tel"],
+input[type="url"],
+input[type="password"]     { border:2px solid #d5d6d8; color:#333;  }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 1 - Layout --------------------------------------
+-----------------------------------------------------------------------------*/
+a:link, a:visited          { color: #000; text-decoration: none; }
+a:hover                    { color: #ff7f00 !important; /* orange color */  }
+::-moz-selection           { background:#000; color: #fff; text-shadow: none; }
+::selection                { background:#000; color: #fff; text-shadow: none; }
+/* -- Header -- */
+html body                  { color: #414141;  background-color: #fafafa;}
+header                     { -moz-box-shadow: 0 1px 5px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 5px rgba(0,0,0,0.1); box-shadow: 0 1px 5px rgba(0,0,0,0.1);}
+.main-menu                 { background-color: #192B33; -moz-box-shadow: 0 1px 5px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 5px rgba(0,0,0,0.1); box-shadow: 0 1px 5px rgba(0,0,0,0.1); }
+
+/* - Layout content - */
+.wrap-fullwidth-bg         { background-color: #FFF; -moz-box-shadow: 0 1px 5px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 5px rgba(0,0,0,0.1); box-shadow: 0 1px 5px rgba(0,0,0,0.1); }
+
+/* - page-content - */
+.left-sidebar              { background-color: #fafafa; -moz-box-shadow: 0 1px 3px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.1);}
+.wrap-content              { background-color: #fafafa; border-left: 1px solid #ddd; border-right: 1px solid #ddd; -moz-box-shadow: 0 1px 3px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.1);}
+#small-sidebar             { background-color: #fd0005; }
+
+/* - single-content - */
+.single-content            { background-color: #FFF; -moz-box-shadow: 0 1px 3px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.1);}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 2 - Header --------------------------------------
+-----------------------------------------------------------------------------*/
+
+/* -- Search Header (menu) -- */
+#searchform2 .buttonicon   { background-color: #ff7f00;}
+#searchform2 .buttonicon:hover { background-color: #192b33;}
+#searchform2 #s            { background-color: #FFF; color: #000 !important; }
+
+/* Modal PopUp Search box */
+.md-content                { color: #fff; background: #192b33; }
+/* Effect 7:  slide and stick to top */
+button                     { background: #192b33; color: #fff; }
+
+/* -- Menu left (sidebar) -- */
+ul.menu-left li a          { color: #192b33; }
+ul.menu-left li a:hover    { background-color: #cccc52; color: #FFF !important; }
+
+/* -- Top Header Menu -- */
+.jquerycssmenu ul li.current_page_item > a, 
+.jquerycssmenu ul li.current-menu-ancestor > a, 
+.jquerycssmenu ul li.current-menu-item > a, 
+.jquerycssmenu ul li.current-menu-parent > a { color: #000; background: #FFF;  }
+.jquerycssmenu ul li ul li.current_page_item > a, 
+.jquerycssmenu ul li ul li.current-menu-ancestor > a, 
+.jquerycssmenu ul li ul li.current-menu-item > a, 
+.jquerycssmenu ul li ul li.current-menu-parent > a { color: #000; background: #FFF; -moz-box-shadow: 0 0px 0px rgba(0,0,0,0.2) !important; -webkit-box-shadow: 0 0px 0px rgba(0,0,0,0.2) !important; box-shadow: 0 0px 0px rgba(0,0,0,0.2) !important;}
+/*Top level menu link items style*/
+.jquerycssmenu ul li a { color: #FFF; }
+.jquerycssmenu ul li:hover a { color: #000 !important; background: #FFF; text-decoration: none !important;}
+/*1st sub level menu*/
+.jquerycssmenu ul li ul { background: #FFF;}
+/* Sub level menu links style */
+.jquerycssmenu ul li ul li a { color:#000; border: none; }
+.jquerycssmenu ul li ul li:hover { color: #000 !important;}
+.jquerycssmenu ul li ul li:hover a { background-color: #FFF; color: #000 !important;}
+.jquerycssmenu ul li ul li:hover a:hover { background-color: #f5f5f5; color: #000 !important;}
+
+/* -- Top social icons -- */
+.top-social li a            { color: #FFF;}
+.top-social li a:hover      { color: #ff7f00;} 
+ul.top-social li.search     { color: #ff7f00;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 3 - Home Content --------------------------------
+-----------------------------------------------------------------------------*/
+ /* -- Icons -- */
+ul.meta-icons-home li.trending-lm {  background-color: #ffd933; }
+.trending-lm .tooltiptext, .sticky-lm .tooltiptext { background-color: #ffd933; }
+.trending-lm .tooltiptext::after, .sticky-lm .tooltiptext::after { border-color: transparent transparent #ffd933 transparent; }
+ul.meta-icons-home li.sticky-lm   { background-color: #cccc52; }
+.sticky-lm .tooltiptext { background-color: #cccc52; }
+.sticky-lm .tooltiptext::after { border-color: transparent transparent #cccc52 transparent; }
+/* -- Category ribbon -- */
+.listbtn-category           { background-color: #cccc52; }
+
+/*-----------------------------------------------------------------------------
+----------------------------- 4 - Entry Content -------------------------------
+-----------------------------------------------------------------------------*/
+
+/* -- ribbons middle categories - */
+.single-category a { background-color: #cccc52; color: #FFF !important;}
+.single-category a:hover { color: #FFF !important; }
+
+/* - title - */
+h1.article-title           { color: #000; }
+h1.page-title              { color: #000; }
+#page-title-box            { border-bottom: 1px solid #f5f4f4; }
+ 
+/* -- Entry content style -- */
+.entry p a        { color: #ff7f00; border-color: #ff7f00; }
+.entry p a:hover  { border-color: #192B33 !important; }
+
+/* -- blockquote -- */
+blockquote { background-color: #fafafa; border-left: 5px solid #192B33; }
+
+/* -- Responsive Images -- */
+.wp-caption-text           { color: #888;}
+.entry .wp-caption-text a         { color: #000 !important; }
+.wp-caption-text a:hover   { color: #000 !important; }
+
+/* -- Pagination entry articles -- */
+.my-paginated-posts span { background-color: #ff7f00; color: #FFF; font-weight: bold; }
+.my-paginated-posts p a  { background-color: #000; color:#fff;}
+
+/* -- Related Articles -- */
+#related-wrap            { background-color: #fafafa; border-top: 1px solid #f5f4f4; } 
+
+/* -- Tags Articles -- */
+#tags-wrap            { background-color: #ff7f00; color: #FFF; }
+div.tags-btns a       { color: #FFF; }
+div.tags-btns a:hover { color: #FFF !important; opacity: 0.7;}
+
+/* -- Line for Related Articles -- */
+.line_bottom_related  { border-bottom: 1px solid #f5f4f4; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 5 - Sidebar & Widgets ---------------------------
+-----------------------------------------------------------------------------*/
+
+/* -- Sidebar -- */
+.sidebar .widget,
+.sidebar-bottom .widget { background-color: #fafafa; -moz-box-shadow: 0 1px 3px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 3px rgba(0,0,0,0.1); box-shadow: 0 1px 3px rgba(0,0,0,0.1);}
+.widget-title h3 { color: #192b33; } 
+.widget-title h3 i { color: #ff7f00;}
+
+/* -- Article widget -- */
+ul.article_list li ul.meta-icons-home li.trending-lm {  background-color: #ffd933; }
+
+/* -- Archives and Nav menu widget -- */
+.widget_nav_menu li { border-bottom: 1px solid #f0eee9;}
+.widget_archive li  { border-bottom: 1px solid #f0eee9;}
+
+/* -- Meta and Pages widget -- */
+.widget_pages li, .widget_meta li { border-bottom: 1px solid #f0eee9;}
+
+/* -- Article widget -- */
+.article_list li         { border-bottom: 1px solid #f5f4f4; } 
+
+ 
+/* -- Widget RSS -- */
+.widget_rss h3 a         { color: #222;}
+
+/* -- Default Tags -- */
+div.tagcloud a:hover  { }
+div.tagcloud a        { background: #f5f5f5 !important; }
+div.tagcloud span     { color: #fd0005; }
+
+/* -- Default Search -- */
+div.widget_search #searchform2 #s { background-color: #FFF; border: 1px solid #f5f4f4; }
+
+/* -- Calendar -- */ 
+#wp-calendar tbody td#today { background-color: #000; color: #FFF;}
+#wp-calendar tbody td#today a { color: #FFF !important;}
+
+/* -- About Author -- */
+.author-meta               { border-bottom: 1px solid #efefef;  }
+.author-info a.author-link { border-bottom: 1px solid #222; }
+.author-meta strong i { color: #95acfc; } 
+div.author-info i.fa-home { color: #b2d790;}
+/* -- About author -- */
+.author-info p             { color: #3E4042; }
+.author-info a.author-link         { color: #3f677a;}
+/* -- Top social icons -- */
+ul.author-social-top li a i          { color: #3f677a; }
+ul.author-social-top li a i.fa-facebook { color: #768bb7; }
+ul.author-social-top li a i.fa-twitter { color: #a2d9f2; }
+ul.author-social-top li a i.fa-pinterest { color: #ea4e56; }
+ul.author-social-top li a i.fa-google-plus { color: #e3826d; }
+ul.author-social-top li a i.fa-envelope { color: #b2d790; }
+ul.author-social-top li a i.fa-instagram { color: #5383a6; }
+ul.author-social-top li a i.fa-vk { color: #8ca3bd; }
+ul.author-social-top li a i.fa-xing { color: #d8e147; }
+ul.author-social-top li a i.fa-youtube { color: #e85e57; }
+ul.author-social-top li a i.fa-dribbble { color: #ee92b6; }
+ul.author-social-top li a i.fa-vimeo { color: #76cafa; }
+ul.author-social-top li a i.fa-soundcloud { color: #fa8247; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 6 - Comments Form -------------------------------
+-----------------------------------------------------------------------------*/
+
+ul.comment li                 { border-bottom: 1px solid #f5f4f4; background-color: #fafafa;}
+ul.comment li ul.children li  { -moz-box-shadow: none; box-shadow: none; -webkit-box-shadow: none;}
+
+/* -- Comments -- */
+.comments .article-btn        { background-color: #192B33; color: #FFF;}
+.comments .article-btn h3     { color: #FFF;}
+.comments h3.comment-reply-title  { color: #FFF !important; background-color: #192B33; }
+.comments h3.comment-reply-title a { color: #FFF; }
+
+/* -- comment Form -- */
+#commentform #author, #email  {  }	
+#commentform textarea         { } 
+#commentform #submit          { background-color: #ff7f00; color: #FFF; border-color: #ff7f00; }
+#commentform #submit:hover    { background-color: #192B33; border-color: #192B33;}
+#commentform label span       { color:#F00;}
+#commentform span             { color:#F00;} 
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 7 - Contact Form --------------------------------
+-----------------------------------------------------------------------------*/
+
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 8 - Custom Pages --------------------------------
+-----------------------------------------------------------------------------*/
+input.ap-form-submit-button   { background-color: #ff7f00; color: #FFF; border-color: #ff7f00;}
+input.ap-form-submit-button:hover { background-color: #192B33; border-color: #192B33;}
+.ap-form-wrapper h2               { background-color: #192B33; color: #FFF;}
+
+ 
+ 
+
+/*-----------------------------------------------------------------------------
+------------------------------ 9 - Footer -------------------------------------
+-----------------------------------------------------------------------------*/
+
+footer                        { background-color: #000;}
+.social-section               { background-color: #cccc52; -moz-box-shadow: 0 1px 5px rgba(0,0,0,0.1); -webkit-box-shadow: 0 1px 5px rgba(0,0,0,0.1); box-shadow: 0 1px 5px rgba(0,0,0,0.1);}
+.wrap-footer                  { background-color: #192b33; }
+
+/* -- Footer Social Icons -- */
+ul.footer-social li a         { color: #FFF; }
+ul.footer-social li a:hover   { color: #FFF !important; }
+
+/* -- Back to Top -- */
+#back-top span                { background-color: #ff7f00;}
+#back-top a:hover             { opacity: 0.7; } 

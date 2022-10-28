@@ -1,0 +1,746 @@
+  /*
+	---------------------------------------------------
+	
+	           Styles for Mobile Devices
+
+	---------------------------------------------------
+*/
+
+
+
+/* Tablet Portrait size to standard 960 (devices and browsers) */
+@media only screen and (min-width: 1004px) and (max-width: 1270px) {
+/*-----------------------------------------------------------------------------
+----------------------------- 1 - Layout --------------------------------------
+-----------------------------------------------------------------------------*/
+/* - Header - */
+header div.wrap            { width: 980px; }
+
+/* - Layout content - */
+.wrap-fullwidth            { width: 980px; }
+.wrap-fullwidth-bg         { width: 980px; }
+
+/* -- Home left -- */
+.wrap-container            { width: 980px; }
+.wrap-left-content         { width: 440px; height: auto; float: left; margin: 0 20px 0 20px;} 
+
+/* - single-content - */
+.single-content            { width: 660px; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 2 - Header --------------------------------------
+-----------------------------------------------------------------------------*/
+ /* -- Top social icons -- */
+ul.top-social              { margin-right: 60px;}
+ul.top-social li           { display: none; }
+ul.top-social li.search    { display: block;} 
+
+ 
+
+/*-----------------------------------------------------------------------------
+----------------------------- 3 - Home Content --------------------------------
+-----------------------------------------------------------------------------*/
+
+/* ##### Modern Articles List ########
+################################### */
+/* -- AD -- */
+ul.modern-list li.homeadv,
+ul.modern-list li.homeadv img { width: 100%; height: auto; }
+/* -- List -- */
+ul.modern-list         { width: 440px }
+ul.modern-list li      { width: 100%; max-height: 180px; }          
+ul.modern-list li img  { width: 180px; height: 180px;}
+ul.modern-list li h2   { margin: 45px 0 15px 0; font-size: 16px; font-weight: 400; line-height: 26px; }
+ul.modern-list li div.modern-list-content { width: 220px; /* +20+20 = 260  padding */ padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full { width: 400px; /* +20+20 = 440  padding */padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full p { display: none; }
+ul.modern-list li div.modern-list-content p { display: none; }
+/* -- Meta -- */
+ul.meta-content-home li { width: auto; height: 20px; font-size: 13px; font-weight: 700; float: left; }
+ul.meta-content-home li.aut-name { display: none; }
+ul.meta-content-home li.lm-space i.fa-times { font-size: 8px !important; padding: 0 10px; }
+/* -- Icons -- */
+ul.meta-icons-home li { width: 34px; height: 34px; }
+/* -- Category ribbon -- */
+.listbtn-category           { margin: 0 0 0 -20px; }
+ul.modern-grid .listbtn-category   { margin: 0 0 0 -25px; }
+
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 4 - Entry Content -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Entry Top / Featured Image / Videos -- */
+.entry-top                 { margin: 0 25px; padding: 30px 0; }
+
+/* -- Entry content style -- */
+.entry                     { margin: 0 25px 40px 25px;} 
+
+/* -- Related Articles -- */
+#related-wrap              { padding: 30px 25px 40px 25px;}
+
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 6 - Comments Form -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Comments -- */
+#comments                  { width: 285px; }
+.comments                  { margin: 50px 25px 50px 0;}
+.sidebar-bottom            { margin: 50px 0 20px 25px; /* -- Sidebar comments -- */}
+
+/*-----------------------------------------------------------------------------
+----------------------------- 8 - Custom Pages --------------------------------
+-----------------------------------------------------------------------------*/
+
+/* -- Front-end Submission Form -- */
+#submission-form           { width: 285px; }
+.submission-form           { margin: 50px 25px 50px 0;}
+
+
+/*-----------------------------------------------------------------------------
+------------------------------ 9 - Footer -------------------------------------
+-----------------------------------------------------------------------------*/
+.wrap-footer                  { width: 90%; padding-left: 5%; padding-right: 5%;  }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 10 - Shortcodes ---------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Accordion -- */
+.accordionButton, .accordionButton1, .accordionButton2, .accordionButton3 { width: 90%; padding-left: 10%; }
+
+}
+
+
+
+
+
+
+
+/* Tablet Portrait size to standard 960 (devices and browsers) */
+@media only screen and (min-width: 760px) and (max-width: 1000px) {
+/*-----------------------------------------------------------------------------
+----------------------------- 1 - Layout --------------------------------------
+-----------------------------------------------------------------------------*/
+/* - Header - */
+header div.wrap            { width: 750px; }
+
+/* - Layout content - */
+.wrap-fullwidth            { width: 750px; }
+.wrap-fullwidth-bg         { width: 750px; }
+
+/* -- Home left -- */
+.wrap-container            { width: 750px; }
+.wrap-left-content         { width: 430px; height: auto; float: left; margin: 0 20px 0 0;}
+.left-sidebar              { display: none;}
+.wrap-left-content-full    { margin: 0 0 0 20px; }  
+
+/* - single-content - */
+.single-content            { width: 430px; }
+.sidebar-bottom            { width: 300px; float: none; margin-left: auto; margin-right: auto;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 2 - Header --------------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Top Header Menu --
+##################### */
+.jquerycssmenu             { display: none;} 
+
+ /* -- Top social icons -- */
+ul.top-social              { margin-right: 60px;}
+
+ 
+/*-----------------------------------------------------------------------------
+----------------------------- 3 - Home Content --------------------------------
+-----------------------------------------------------------------------------*/
+/* ##### Modern Articles List ########
+################################### */
+/* -- AD -- */
+ul.modern-list li.homeadv,
+ul.modern-list li.homeadv img { width: 100%; height: auto; }
+/* -- List -- */
+ul.modern-list         { width: 430px }
+ul.modern-list li      { width: 100%; max-height: 180px; }          
+ul.modern-list li img  { width: 180px; height: 180px;}
+ul.modern-list li h2   { margin: 45px 0 15px 0; font-size: 16px; font-weight: 400; line-height: 26px; }
+ul.modern-list li div.modern-list-content { width: 210px; /* +20+20 = 260  padding */ padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full { width: 390px; /* +20+20 = 440  padding */padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full p { display: none; }
+ul.modern-list li div.modern-list-content p { display: none; }
+/* -- Grid -- */
+ul.modern-grid         { width: 640px; height: auto; margin: 0 auto 20px auto;}
+/* -- Meta -- */
+ul.meta-content-home li { width: auto; height: 20px; font-size: 13px; font-weight: 700; float: left; }
+ul.meta-content-home li.aut-name { display: none; }
+ul.meta-content-home li.lm-space i.fa-times { font-size: 8px !important; padding: 0 10px; }
+/* -- Icons -- */
+ul.meta-icons-home li { width: 34px; height: 34px; }
+/* -- Category ribbon -- */
+.listbtn-category           { margin: 0 0 0 -20px; }
+ul.modern-grid .listbtn-category   { margin: 0 0 0 -25px; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 4 - Entry Content -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Entry Top / Featured Image / Videos -- */
+.entry-top                 { margin: 0 25px; padding: 30px 0; }
+
+/* -- Entry content style -- */
+.entry                     { margin: 0 25px 40px 25px;} 
+
+/* -- Related Articles -- */
+#related-wrap              { padding: 30px 25px 40px 25px;}
+
+/* -- Meta Single page -- */
+ul.meta-single-content li.aut-name { display: none;}
+
+/* -- Single Share -- */
+ul.single-share            { margin-top: 3px; }
+
+/* - title - */
+h1.article-title           { font-size: 24px; line-height: 38px; }
+#page-title-box            { margin: 30px 0 20px 0; }
+
+/* -- About Author -- */
+.author-meta-entry         { padding: 45px 30px 30px 30px;}
+.author-meta               { height: auto; float: left; }
+.author-left-meta          { height: 120px; }
+ul.author-social-top       { margin: -10px 0 0 -10px !important;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 6 - Comments Form -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Comments -- */
+#comments                  { width: 380px; float: none; margin: 25px auto; }
+.comments                  { margin: 50px auto 50px auto;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 8 - Custom Pages --------------------------------
+-----------------------------------------------------------------------------*/
+/* -- 404 page -- */
+#list-mag-404 .middle-404  { max-width: 700px; margin: 0 auto;}
+
+/* -- Front-end Submission Form -- */
+#submission-form           { width: 380px; float: none; margin: 25px auto; }
+.submission-form           { margin: 50px 0 50px 0;}
+
+
+/*-----------------------------------------------------------------------------
+------------------------------ 9 - Footer -------------------------------------
+-----------------------------------------------------------------------------*/
+.wrap-footer                  { width: 90%; padding-left: 5%; padding-right: 5%;  }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 10 - Shortcodes ---------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Accordion -- */
+.accordionButton, .accordionButton1, .accordionButton2, .accordionButton3 { width: 85%; padding-left: 15%; }
+
+}
+
+
+
+
+
+
+/* Mobile Landscape Size to Tablet Portrait (devices and browsers) */
+@media only screen and (min-width: 580px) and (max-width: 760px) {
+/*-----------------------------------------------------------------------------
+----------------------------- 1 - Layout --------------------------------------
+-----------------------------------------------------------------------------*/
+/* - Header - */
+header div.wrap            { width: 570px; }
+
+/* - Layout content - */
+.wrap-fullwidth            { width: 570px; }
+.wrap-fullwidth-bg         { width: 570px; }
+
+/* -- Home left -- */
+.wrap-container            { width: 570px; }
+.wrap-left-content         { width: 430px; height: auto; float: left; margin: 0 20px 0 0;}
+.left-sidebar              { display: none;}
+.wrap-left-content-full    { margin: 0 0 0 0; }  
+
+/* - single-content - */
+.single-content            { width: 570px; }
+.sidebar-bottom            { width: 300px; float: none; margin-left: auto; margin-right: auto;}
+.wrap-container .sidebar   { display: none;}
+.sidebar           		   { width: 570px; float: left;  margin-top: 30px; }
+.sidebar .widget           { width: 470px; margin: 0 auto 25px auto; padding-right: 50px; padding-left: 50px;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 2 - Header --------------------------------------
+-----------------------------------------------------------------------------*/
+ /* -- Top social icons -- */
+ul.top-social              { margin-right: 60px;}
+
+/* -- Top Header Menu --
+##################### */
+.jquerycssmenu             { display: none;} 
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 3 - Home Content --------------------------------
+-----------------------------------------------------------------------------*/
+/* ##### Modern Articles List ########
+################################### */
+/* -- AD -- */
+ul.modern-list li.homeadv,
+ul.modern-list li.homeadv img { width: 100%; height: auto; }
+ul.modern-grid li.homeadv,
+ul.modern-grid li.homeadv img { width: 100%; height: auto; }
+/* -- List -- */
+ul.modern-list         { width: 570px }
+ul.modern-list li      { width: 100%; max-height: 180px; }          
+ul.modern-list li img  { width: 180px; height: 180px;}
+ul.modern-list li h2   { margin: 45px 0 15px 0; font-size: 16px; font-weight: 400; line-height: 26px; }
+ul.modern-list li div.modern-list-content { width: 350px; /* +20+20 = 390  padding */ padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full { width: 530px; /* +20+20 = 570  padding */padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full p { display: none; }
+ul.modern-list li div.modern-list-content p { display: none; }
+/* -- Grid -- */
+ul.modern-grid         { width: 570px; height: auto; margin: 0 auto 20px auto;}
+ul.modern-grid li      { width: 100%; max-height: 180px; }          
+ul.modern-grid li img  { width: 180px; height: 180px;}
+ul.modern-grid li h2   {  margin: 45px 0 15px 0; font-size: 16px; font-weight: 400; line-height: 26px; }
+ul.modern-grid li div.modern-grid-content { width: 350px; /* +20+20 = 390  padding */ padding: 0 20px 10px 20px; }
+ul.modern-grid li div.modern-grid-content p { display: none; }
+/* -- Meta -- */
+ul.meta-content-home li { width: auto; height: 20px; font-size: 13px; font-weight: 700; float: left; }
+ul.meta-content-home li.aut-name { display: none; }
+ul.meta-content-home li.lm-space i.fa-times { font-size: 8px !important; padding: 0 10px; }
+/* -- Icons -- */
+ul.meta-icons-home li { width: 34px; height: 34px; }
+/* -- Category ribbon -- */
+.listbtn-category           { margin: 0 0 0 -20px; }
+ul.modern-grid .listbtn-category   { margin: 0 0 0 -20px; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 4 - Entry Content -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- About Author -- */
+.author-meta-entry         { padding: 45px 30px 30px 30px;}
+.author-meta               { height: auto; float: left; }
+.author-left-meta          { height: 120px; }
+
+/*-----------------------------------------------------------------------------
+----------------------------- 5 - Sidebar & Widgets ---------------------------
+-----------------------------------------------------------------------------*/
+/* -- Banner widget 300px -- */
+.sidebar .widget .img-300          { width: 300px; height: auto; margin: 0 auto;}
+
+/* -- Banner widget 250px -- */
+.sidebar .widget .img-250          { width: 250px; height: auto; margin: 0 auto; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 6 - Comments Form -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Comments -- */
+#comments                         { width: 470px; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 8 - Custom Pages --------------------------------
+-----------------------------------------------------------------------------*/
+/* -- 404 page -- */
+#list-mag-404              { padding: 100px 0 100px 0;}
+#list-mag-404 .middle-404  { width: 80%; margin: 0 auto;}
+#list-mag-404 .widget_recent_entries  { margin: 20px auto 0 auto;}
+#list-mag-404 h1               { font-size: 60px; padding: 0 0 40px 0;}
+#list-mag-404 p                { font-size: 20px; line-height: 32px;}
+#list-mag-404 .one_half, #list-mag-404 .one_half_last { float:left; width:100%; margin-bottom:10px; margin-right:0; }
+#list-mag-404 .one_half_last                    { margin-right:0;}
+
+/* -- Front-end Submission Form -- */
+#submission-form           { width: 470px; float: none; margin: 0 auto 25px auto;  }
+.submission-form           { margin: 50px 50px 50px 50px;}
+
+
+/*-----------------------------------------------------------------------------
+------------------------------ 9 - Footer -------------------------------------
+-----------------------------------------------------------------------------*/
+.wrap-footer                  { width: 90%; padding-left: 5%; padding-right: 5%;  }
+
+/* -- Footer Social Icons -- */
+ul.footer-social li span      { font-size: 16px; display: none;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 10 - Shortcodes ---------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Accordion -- */
+.accordionButton, .accordionButton1, .accordionButton2, .accordionButton3 { width: 90%; padding-left: 10%; }
+
+}
+
+
+
+
+
+
+/* Mobile Landscape Size to Tablet Portrait (devices and browsers) */
+@media only screen and (min-width: 480px) and (max-width: 580px) {
+/*-----------------------------------------------------------------------------
+----------------------------- 1 - Layout --------------------------------------
+-----------------------------------------------------------------------------*/
+/* - Header - */
+header div.wrap            { width: 460px; }
+
+/* - Layout content - */
+.wrap-fullwidth            { width: 460px; }
+.wrap-fullwidth-bg         { width: 460px; }
+
+/* -- Home left -- */
+.wrap-container            { width: 460px; }
+.wrap-left-content         { width: 430px; height: auto; float: left; margin: 0 20px 0 0;}
+.left-sidebar              { display: none;}
+.wrap-left-content-full    { margin: 0 0 0 0; }  
+
+/* - single-content - */
+.single-content            { width: 460px; }
+.sidebar-bottom            { width: 300px; float: none; margin-left: auto; margin-right: auto;}
+.wrap-container .sidebar   { display: none;}
+.sidebar           		   { width: 460px; float: left;  margin-top: 30px; }
+.sidebar .widget           { width: 360px; margin: 0 auto 25px auto; padding-right: 50px; padding-left: 50px;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 2 - Header --------------------------------------
+-----------------------------------------------------------------------------*/
+ /* -- Top social icons -- */
+ul.top-social              { margin-right: 50px;}
+ul.top-social li           { display: none; }
+ul.top-social li.search    { display: block;} 
+
+/* -- Top Header Menu --
+##################### */
+.jquerycssmenu             { display: none;} 
+
+
+ 
+/*-----------------------------------------------------------------------------
+----------------------------- 3 - Home Content --------------------------------
+-----------------------------------------------------------------------------*/
+/* ##### Modern Articles List ########
+################################### */
+/* -- AD -- */
+ul.modern-list li.homeadv,
+ul.modern-list li.homeadv img { width: 100%; height: auto; }
+ul.modern-grid li.homeadv,
+ul.modern-grid li.homeadv img { width: 100%; height: auto; }
+/* -- List -- */
+ul.modern-list         { width: 460px }
+ul.modern-list li      { width: 100%; max-height: 180px; }          
+ul.modern-list li img  { width: 180px; height: 180px;}
+ul.modern-list li h2   { margin: 45px 0 15px 0; font-size: 16px; font-weight: 400; line-height: 26px; }
+ul.modern-list li div.modern-list-content { width: 240px; /* +20+20 = 280  padding */ padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full { width: 420px; /* +20+20 = 460  padding */padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full p { display: none; }
+ul.modern-list li div.modern-list-content p { display: none; }
+/* -- Grid -- */
+ul.modern-grid         { width: 460px; height: auto; margin: 0 auto 20px auto;}
+ul.modern-grid li      { width: 100%; max-height: 180px; }          
+ul.modern-grid li img  { width: 180px; height: 180px;}
+ul.modern-grid li h2   {  margin: 45px 0 15px 0; font-size: 16px; font-weight: 400; line-height: 26px; }
+ul.modern-grid li div.modern-grid-content { width: 240px; /* +20+20 = 280  padding */ padding: 0 20px 10px 20px; }
+ul.modern-grid li div.modern-grid-content p { display: none; }
+/* -- Meta -- */
+ul.meta-content-home li { width: auto; height: 20px; font-size: 13px; font-weight: 700; float: left; }
+ul.meta-content-home li.aut-name { display: none; }
+ul.meta-content-home li.lm-space i.fa-times { font-size: 8px !important; padding: 0 10px; }
+/* -- Icons -- */
+ul.meta-icons-home li { width: 34px; height: 34px; }
+/* -- Category ribbon -- */
+.listbtn-category           { margin: 0 0 0 -20px; }
+ul.modern-grid .listbtn-category   { margin: 0 0 0 -20px; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 4 - Entry Content -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Entry Top / Featured Image / Videos -- */
+.entry-top                 { margin: 0 25px; padding: 30px 0; }
+
+/* -- Entry content style -- */
+.entry                     { margin: 0 25px 40px 25px;} 
+
+/* -- Related Articles -- */
+#related-wrap              { padding: 30px 25px 40px 25px;}
+
+/* -- Meta Single page -- */
+ul.meta-single-content li.aut-name { display: none;}
+
+/* -- Single Share -- */
+ul.single-share            { margin-top: 3px; }
+
+/* - title - */
+h1.article-title           { font-size: 24px; line-height: 38px; }
+#page-title-box            { margin: 30px 0 20px 0; padding: 0 25px 15px 25px; }
+
+/* -- About Author -- */
+.author-meta-entry         { padding: 45px 30px 30px 30px;}
+.author-meta               { height: auto; float: left; }
+.author-left-meta          { height: 200px; }
+ul.author-social-top       { margin: -30px 0 0 -20px !important;}
+
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 5 - Sidebar & Widgets ---------------------------
+-----------------------------------------------------------------------------*/
+/* -- Banner widget 300px -- */
+.sidebar .widget .img-300          { width: 300px; height: auto; margin: 0 auto;}
+
+/* -- Banner widget 250px -- */
+.sidebar .widget .img-250          { width: 250px; height: auto; margin: 0 auto; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 6 - Comments Form -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Comments -- */
+#comments                     { width: 410px; }
+.comments                     { margin: 50px 25px 50px 25px;}
+
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 8 - Custom Pages --------------------------------
+-----------------------------------------------------------------------------*/
+/* -- 404 page -- */
+#list-mag-404              { padding: 100px 0 100px 0;}
+#list-mag-404 .middle-404  { width: 80%; margin: 0 auto;}
+#list-mag-404 .widget_recent_entries  { margin: 20px auto 0 auto;}
+#list-mag-404 h1               { font-size: 60px; padding: 0 0 40px 0;}
+#list-mag-404 p                { font-size: 20px; line-height: 32px;}
+#list-mag-404 .one_half, #list-mag-404 .one_half_last { float:left; width:100%; margin-bottom:10px; margin-right:0; }
+#list-mag-404 .one_half_last                    { margin-right:0;}
+
+/* -- Front-end Submission Form -- */
+#submission-form           { width: 410px; float: none; margin: 0 auto 25px auto;  }
+.submission-form           { margin: 50px 25px 50px 25px;}
+
+
+/*-----------------------------------------------------------------------------
+------------------------------ 9 - Footer -------------------------------------
+-----------------------------------------------------------------------------*/
+.wrap-footer                  { width: 90%; padding-left: 5%; padding-right: 5%; padding-bottom: 70px;  }
+
+/* -- Footer Social Icons -- */
+ul.footer-social li span      { font-size: 16px; display: none;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 10 - Shortcodes ---------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Accordion -- */
+.accordionButton, .accordionButton1, .accordionButton2, .accordionButton3 { width: 85%; padding-left: 13%; }
+
+
+}
+
+
+
+
+
+
+
+
+
+/* All Mobile Size (devices) */
+@media only screen and (max-width: 479px) { 
+/*-----------------------------------------------------------------------------
+----------------------------- 1 - Layout --------------------------------------
+-----------------------------------------------------------------------------*/
+/* - Header - */
+header div.wrap            { width: 305px; }
+
+/* - Layout content - */
+.wrap-fullwidth            { width: 100%; }
+.wrap-fullwidth-bg         { width: 100%; }
+
+/* -- Home left -- */
+.wrap-container            { width: 305px; }
+.wrap-left-content         { width: 305px; height: auto; float: left; margin: 0 20px 0 0;}
+.left-sidebar              { display: none;}
+.wrap-left-content-full    { margin: 0 0 0 0; }  
+
+/* - single-content - */
+.single-content            { width: 100%; }
+.sidebar-bottom            { width: 300px; float: none; margin-left: auto; margin-right: auto;}
+.wrap-container .sidebar   { display: none;}
+.sidebar           		   { width: 100%; float: left;  margin:  30px auto 0 auto; }
+.sidebar .widget           { width: 90%; margin: 0 auto 25px auto; padding-right: 5%; padding-left: 5%;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 2 - Header --------------------------------------
+-----------------------------------------------------------------------------*/
+ /* -- Top social icons -- */
+ul.top-social              { margin-right: 50px;}
+ul.top-social li           { display: none; }
+ul.top-social li.search    { display: block;} 
+
+/* -- Top Header Menu --
+##################### */
+.jquerycssmenu             { display: none;} 
+ 
+/*-----------------------------------------------------------------------------
+----------------------------- 3 - Home Content --------------------------------
+-----------------------------------------------------------------------------*/
+/* ##### Modern Articles List ########
+################################### */
+/* -- AD -- */
+ul.modern-list li.homeadv,
+ul.modern-list li.homeadv img { width: 100%; height: auto; }
+ul.modern-grid li.homeadv,
+ul.modern-grid li.homeadv img { width: 100%; height: auto; }
+/* -- List -- */
+ul.modern-list         { width: 305px }
+ul.modern-list li      { width: 100%; max-height: 130px; }          
+ul.modern-list li img  { width: 130px; height: 130px;}
+ul.modern-list li h2   { margin: 15px 0 5px 0; font-size: 14px; font-weight: 400; line-height: 22px; }
+ul.modern-list li div.modern-list-content { width: 135px; /* +20+20 = 175  padding */ padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full { width: 265px; /* +20+20 = 305  padding */padding: 0 20px 10px 20px; }
+ul.modern-list li div.modern-list-content-full p { display: none; }
+ul.modern-list li div.modern-list-content p { display: none; }
+ul.modern-list li div.time-ago  { display: none;}
+ul.meta-content-home li { display: none;}
+ul.meta-content-home li.thumbs-ranting { display: block;}
+/* -- Grid -- */
+ul.modern-grid         { width: 305px; height: auto; margin: 0 auto 20px auto;}
+ul.modern-grid li      { width: 100%; max-height: 130px; }          
+ul.modern-grid li img  { width: 130px; height: 130px;}
+ul.modern-grid li h2   { margin: 15px 0 5px 0; font-size: 14px; font-weight: 400; line-height: 22px; }
+ul.modern-grid li div.modern-grid-content { width: 135px; /* +20+20 = 175  padding */ padding: 0 20px 10px 20px; }
+ul.modern-grid li div.modern-grid-content p { display: none; }
+ul.modern-grid li div.time-ago  { display: none;}
+
+/* -- Icons -- */
+ul.meta-icons-home li { width: 34px; height: 34px; }
+/* -- Category ribbon -- */
+.listbtn-category           { display: none; }
+ul.modern-grid .listbtn-category   { display: none; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 4 - Entry Content -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Entry Top / Featured Image / Videos -- */
+.entry-top                 { margin: 0 25px; padding: 30px 0; }
+
+/* -- Entry content style -- */
+.entry                     { margin: 0 25px 40px 25px;} 
+
+/* -- Related Articles -- */
+#related-wrap              { padding: 30px 25px 40px 25px;}
+.one_half_rw, .one_half_last_rw     { float:left;width:100%; margin-right:0; }
+.one_half_last_rw                   { margin-right:0;}
+
+/* -- Meta Single page -- */
+ul.meta-single-content li.aut-name { display: none;}
+ul.meta-single-content li.time-article { display: none;}
+ul.meta-single-content li.lm-space { display: none;}
+ul.meta-single-content li  { padding-right: 20px;}
+
+/* -- Single Share -- */
+ul.single-share            { margin-top: 3px; }
+ul.single-share a span     { display: none;}
+.entry ul.single-share li a       { padding: 3px 10px; }
+
+/* - title - */
+h1.article-title           { font-size: 20px; line-height: 32px; }
+#page-title-box            { margin: 30px 0 20px 0; padding: 0 25px 15px 25px; }
+
+/* -- Entry button for password, etc -- */
+form.post-password-form input { width: 197px !important; }
+form.post-password-form input[type="submit"] { width: 200px !important;  }
+.post-password-form { width: 200px; } 
+
+/* -- About Author -- */
+.author-meta-entry         { padding: 45px 0 30px 0;}
+.author-meta               { width: 80%; margin: 0 auto 0 auto; height: auto; float: none; }
+.author-left-meta          { height: auto; }
+.author-info p             { }
+
+/* -- Author social icons -- */
+ul.author-social-top       { margin: 0 0 0 0 !important;}
+ul.author-social-top li      { font-size: 14px; }
+ul.author-social-top li a i         { padding: 5px 6px;}
+
+/*-----------------------------------------------------------------------------
+----------------------------- 5 - Sidebar & Widgets ---------------------------
+-----------------------------------------------------------------------------*/
+/* -- Banner widget 300px -- */
+.sidebar .widget .img-300          { width: 300px; height: auto; margin: 0 auto;}
+
+/* -- Banner widget 250px -- */
+.sidebar .widget .img-250          { width: 250px; height: auto; margin: 0 auto; }
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 6 - Comments Form -------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Comments -- */
+#comments                         { width: 310px; float: none; margin: 0 auto; }
+.comments                         { margin: 50px 0 50px 0;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 8 - Custom Pages --------------------------------
+-----------------------------------------------------------------------------*/
+/* -- 404 page -- */
+#list-mag-404              { padding: 100px 0 100px 0;}
+#list-mag-404 .middle-404  { width: 80%; margin: 0 auto;}
+#list-mag-404 .widget_recent_entries  { margin: 20px auto 0 auto;}
+#list-mag-404 h1               { font-size: 50px; padding: 0 0 40px 0;}
+#list-mag-404 p                { font-size: 20px; line-height: 32px;}
+#list-mag-404 .one_half, #list-mag-404 .one_half_last { float:left; width:100%; margin-bottom:10px; margin-right:0; }
+#list-mag-404 .one_half_last                    { margin-right:0;}
+
+/* -- Front-end Submission Form -- */
+#submission-form           { width: 90%; float: none; margin: 0 auto 25px auto;  }
+.submission-form           { margin: 50px 5% 50px 5%;}
+
+
+/*-----------------------------------------------------------------------------
+------------------------------ 9 - Footer -------------------------------------
+-----------------------------------------------------------------------------*/
+.wrap-footer                  { width: 90%; height: 90px; padding-left: 5%; padding-right: 5%; padding-bottom: 70px;  }
+
+/* -- Footer Social Icons -- */
+ul.footer-social li span      { font-size: 16px; display: none;}
+
+
+/*-----------------------------------------------------------------------------
+----------------------------- 10 - Shortcodes ---------------------------------
+-----------------------------------------------------------------------------*/
+/* -- Accordion -- */
+.accordionButton, .accordionButton1, .accordionButton2, .accordionButton3 { width: 80%; padding-left: 17%; }
+/* -- Columns -- */
+.one_half, .one_half_last         { float:left;width:100%; margin-bottom:10px; margin-right:0; }
+.one_half_last                    { margin-right:0;}
+
+.one_third, .one_third_last       { float:left; width:100%; margin-bottom:10px; margin-right:0; }
+.one_third_last                   { margin-right:0;}
+
+.one_fourth, .one_fourth_last     { float:left; width:100%; margin-bottom:10px; margin-right:0; }
+.one_fourth_last                  { margin-right:0;}
+}
+
+
+/* All Mobile Size (devices) */
+@media only screen and (max-width: 350px) { 
+ /* -- Top social icons -- */
+ul.top-social              { display: none;}
+}

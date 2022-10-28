@@ -1,0 +1,2195 @@
+<!DOCTYPE html>
+<html lang="en-US"><script type="text/javascript">try {
+(function injectPageScriptAPI(scriptName, shouldOverrideWebSocket, shouldOverrideWebRTC, isInjected) { 
+
+    'use strict';
+
+    /**
+     * If script have been injected into a frame via contentWindow then we can simply take the copy of messageChannel left for us by parent document
+     * Otherwise creates new message channel that sends a message to the content-script to check if request should be allowed or not.
+     */
+    var messageChannel = isInjected ? window[scriptName] : (function () {
+
+        // Save original postMessage and addEventListener functions to prevent webpage from tampering both.
+        var postMessage = window.postMessage;
+        var addEventListener = window.addEventListener;
+
+        // Current request ID (incremented every time we send a new message)
+        var currentRequestId = 0;
+        var requestsMap = {};
+
+        /**
+         * Handles messages sent from the content script back to the page script.
+         *
+         * @param event Event with necessary data
+         */
+        var onMessageReceived = function (event) {
+
+            if (!event.data || !event.data.direction || event.data.direction !== "to-page-script@abu") {
+                return;
+            }
+
+            var requestData = requestsMap[event.data.requestId];
+            if (requestData) {
+                var wrapper = requestData.wrapper;
+                requestData.onResponseReceived(wrapper, event.data.block);
+                delete requestsMap[event.data.requestId];
+            }
+        };
+
+        /**
+         * @param url                The URL to which wrapped object is willing to connect
+         * @param requestType        Request type ( WEBSOCKET or WEBRTC)
+         * @param wrapper            WebSocket wrapper instance
+         * @param onResponseReceived Called when response is received
+         */
+        var sendMessage = function (url, requestType, wrapper, onResponseReceived) {
+
+            if (currentRequestId === 0) {
+                // Subscribe to response when this method is called for the first time
+                addEventListener.call(window, "message", onMessageReceived, false);
+            }
+
+            var requestId = ++currentRequestId;
+            requestsMap[requestId] = {
+                wrapper: wrapper,
+                onResponseReceived: onResponseReceived
+            };
+
+            var message = {
+                requestId: requestId,
+                direction: 'from-page-script@abu',
+                elementUrl: url,
+                documentUrl: document.URL,
+                requestType: requestType
+            };
+
+            // Send a message to the background page to check if the request should be blocked
+            postMessage.call(window, message, "*");
+        };
+
+        return {
+            sendMessage: sendMessage
+        };
+
+    })();
+
+    /*
+     * In some case Chrome won't run content scripts inside frames.
+     * So we have to intercept access to contentWindow/contentDocument and manually inject wrapper script into this context
+     *
+     * Based on: https://github.com/adblockplus/adblockpluschrome/commit/1aabfb3346dc0821c52dd9e97f7d61b8c99cd707
+     */
+    var injectedToString = Function.prototype.toString.bind(injectPageScriptAPI);
+
+    var injectedFramesAdd;
+    var injectedFramesHas;
+    if (window.WeakSet instanceof Function) {
+        var injectedFrames = new WeakSet();
+        injectedFramesAdd = WeakSet.prototype.add.bind(injectedFrames);
+        injectedFramesHas = WeakSet.prototype.has.bind(injectedFrames);
+    } else {
+        var frames = [];
+        injectedFramesAdd = function (el) {
+            if (frames.indexOf(el) < 0) {
+                frames.push(el);
+            }
+        };
+        injectedFramesHas = function (el) {
+            return frames.indexOf(el) >= 0;
+        };
+    }
+
+    /**
+     * Injects wrapper's script into passed window
+     * @param contentWindow Frame's content window
+     */
+    function injectPageScriptAPIInWindow(contentWindow) {
+        try {
+            if (contentWindow && !injectedFramesHas(contentWindow)) {
+                injectedFramesAdd(contentWindow);
+                contentWindow[scriptName] = messageChannel; // Left message channel for the injected script
+                var args = "'" + scriptName + "', " + shouldOverrideWebSocket + ", " + shouldOverrideWebRTC + ", true";
+                contentWindow.eval("(" + injectedToString() + ")(" + args + ");");
+                delete contentWindow[scriptName];
+            }
+        } catch (e) {
+        }
+    }
+
+    /**
+     * Overrides access to contentWindow/contentDocument for the passed HTML element's interface (iframe, frame, object)
+     * If the content of one of these objects is requested we will inject our wrapper script.
+     * @param iface HTML element's interface
+     */
+    function overrideContentAccess(iface) {
+
+        var contentWindowDescriptor = Object.getOwnPropertyDescriptor(iface.prototype, "contentWindow");
+        var contentDocumentDescriptor = Object.getOwnPropertyDescriptor(iface.prototype, "contentDocument");
+
+        // Apparently in HTMLObjectElement.prototype.contentWindow does not exist
+        // in older versions of Chrome such as 42.
+        if (!contentWindowDescriptor) {
+            return;
+        }
+
+        var getContentWindow = Function.prototype.call.bind(contentWindowDescriptor.get);
+        var getContentDocument = Function.prototype.call.bind(contentDocumentDescriptor.get);
+
+        contentWindowDescriptor.get = function () {
+            var contentWindow = getContentWindow(this);
+            injectPageScriptAPIInWindow(contentWindow);
+            return contentWindow;
+        };
+        contentDocumentDescriptor.get = function () {
+            injectPageScriptAPIInWindow(getContentWindow(this));
+            return getContentDocument(this);
+        };
+
+        Object.defineProperty(iface.prototype, "contentWindow", contentWindowDescriptor);
+        Object.defineProperty(iface.prototype, "contentDocument", contentDocumentDescriptor);
+    }
+
+    var interfaces = [HTMLFrameElement, HTMLIFrameElement, HTMLObjectElement];
+    for (var i = 0; i < interfaces.length; i++) {
+        overrideContentAccess(interfaces[i]);
+    }
+
+    /**
+     * Defines properties in destination object
+     * @param src Source object
+     * @param dest Destination object
+     * @param properties Properties to copy
+     */
+    var copyProperties = function (src, dest, properties) {
+        for (var i = 0; i < properties.length; i++) {
+            var prop = properties[i];
+            var descriptor = Object.getOwnPropertyDescriptor(src, prop);
+            // Passed property may be undefined
+            if (descriptor) {
+                Object.defineProperty(dest, prop, descriptor);
+            }
+        }
+    };
+
+    /**
+     * Check request by sending message to content script
+     * @param url URL to block
+     * @param type Request type
+     * @param callback Result callback
+     */
+    var checkRequest = function (url, type, callback) {
+        messageChannel.sendMessage(url, type, this, function (wrapper, blockConnection) {
+            callback(blockConnection);
+        });
+    };
+
+    /**
+     * The function overrides window.WebSocket with our wrapper, that will check url with filters through messaging with content-script.
+     *
+     * IMPORTANT NOTE:
+     * This function is first loaded as a content script. The only purpose of it is to call
+     * the "toString" method and use resulting string as a text content for injected script.
+     */
+    var overrideWebSocket = function () { 
+
+        if (!(window.WebSocket instanceof Function)) {
+            return;
+        }
+
+        /**
+         * WebSocket wrapper implementation.
+         * https://github.com/AdguardTeam/AdguardBrowserExtension/issues/349
+         *
+         * Based on:
+         * https://github.com/adblockplus/adblockpluschrome/commit/457a336ee55a433217c3ffe5d363e5c6980f26f4
+         */
+
+        /**
+         * As far as possible we must track everything we use that could be sabotaged by the website later in order to circumvent us.
+         */
+        var RealWebSocket = WebSocket;
+        var closeWebSocket = Function.prototype.call.bind(RealWebSocket.prototype.close);
+
+        function WrappedWebSocket(url, protocols) {
+            // Throw correct exceptions if the constructor is used improperly.
+            if (!(this instanceof WrappedWebSocket)) {
+                return RealWebSocket();
+            }
+            if (arguments.length < 1) {
+                return new RealWebSocket();
+            }
+
+            var websocket = new RealWebSocket(url, protocols);
+
+            // This is the key point: checking if this WS should be blocked or not
+            // Don't forget that the type of 'websocket.url' is String, but 'url 'parameter might have another type.
+            checkRequest(websocket.url, 'WEBSOCKET', function (blocked) {
+                if (blocked) {
+                    closeWebSocket(websocket);
+                }
+            });
+
+            return websocket;
+        }
+
+        // https://github.com/AdguardTeam/AdguardBrowserExtension/issues/488
+        WrappedWebSocket.prototype = RealWebSocket.prototype;
+        window.WebSocket = WrappedWebSocket.bind();
+
+        copyProperties(RealWebSocket, WebSocket, ["CONNECTING", "OPEN", "CLOSING", "CLOSED", "name", "prototype"]);
+
+        RealWebSocket.prototype.constructor = WebSocket;
+
+    };
+
+    /**
+     * The function overrides window.RTCPeerConnection with our wrapper, that will check ice servers URLs with filters through messaging with content-script.
+     *
+     * IMPORTANT NOTE:
+     * This function is first loaded as a content script. The only purpose of it is to call
+     * the "toString" method and use resulting string as a text content for injected script.
+     */
+    var overrideWebRTC = function () { 
+
+
+        if (!(window.RTCPeerConnection instanceof Function) &&
+            !(window.webkitRTCPeerConnection instanceof Function)) {
+            return;
+        }
+
+        /**
+         * RTCPeerConnection wrapper implementation.
+         * https://github.com/AdguardTeam/AdguardBrowserExtension/issues/588
+         *
+         * Based on:
+         * https://github.com/adblockplus/adblockpluschrome/commit/af0585137be19011eace1cf68bf61eed2e6db974
+         *
+         * Chromium webRequest API doesn't allow the blocking of WebRTC connections
+         * https://bugs.chromium.org/p/chromium/issues/detail?id=707683
+         */
+
+        var RealRTCPeerConnection = window.RTCPeerConnection || window.webkitRTCPeerConnection;
+        var closeRTCPeerConnection = Function.prototype.call.bind(RealRTCPeerConnection.prototype.close);
+
+        var RealArray = Array;
+        var RealString = String;
+        var createObject = Object.create;
+        var defineProperty = Object.defineProperty;
+
+        /**
+         * Convert passed url to string
+         * @param url URL
+         * @returns {string}
+         */
+        function urlToString(url) {
+            if (typeof url !== "undefined") {
+                return RealString(url);
+            }
+        }
+
+        /**
+         * Creates new immutable array from original with some transform function
+         * @param original
+         * @param transform
+         * @returns {*}
+         */
+        function safeCopyArray(original, transform) {
+
+            if (original === null || typeof original !== "object") {
+                return original;
+            }
+
+            var immutable = RealArray(original.length);
+            for (var i = 0; i < immutable.length; i++) {
+                defineProperty(immutable, i, {
+                    configurable: false, enumerable: false, writable: false,
+                    value: transform(original[i])
+                });
+            }
+            defineProperty(immutable, "length", {
+                configurable: false, enumerable: false, writable: false,
+                value: immutable.length
+            });
+            return immutable;
+        }
+
+        /**
+         * Protect configuration from mutations
+         * @param configuration RTCPeerConnection configuration object
+         * @returns {*}
+         */
+        function protectConfiguration(configuration) {
+
+            if (configuration === null || typeof configuration !== "object") {
+                return configuration;
+            }
+
+            var iceServers = safeCopyArray(
+                configuration.iceServers,
+                function (iceServer) {
+
+                    var url = iceServer.url;
+                    var urls = iceServer.urls;
+
+                    // RTCPeerConnection doesn't iterate through pseudo Arrays of urls.
+                    if (typeof urls !== "undefined" && !(urls instanceof RealArray)) {
+                        urls = [urls];
+                    }
+
+                    return createObject(iceServer, {
+                        url: {
+                            configurable: false, enumerable: false, writable: false,
+                            value: urlToString(url)
+                        },
+                        urls: {
+                            configurable: false, enumerable: false, writable: false,
+                            value: safeCopyArray(urls, urlToString)
+                        }
+                    });
+                }
+            );
+
+            return createObject(configuration, {
+                iceServers: {
+                    configurable: false, enumerable: false, writable: false,
+                    value: iceServers
+                }
+            });
+        }
+
+        /**
+         * Check WebRTC connection's URL and close if it's blocked by rule
+         * @param connection Connection
+         * @param url URL to check
+         */
+        function checkWebRTCRequest(connection, url) {
+            checkRequest(url, 'WEBRTC', function (blocked) {
+                if (blocked) {
+                    try {
+                        closeRTCPeerConnection(connection);
+                    } catch (e) {
+                        // Ignore exceptions
+                    }
+                }
+            });
+        }
+
+        /**
+         * Check each URL of ice server in configuration for blocking.
+         *
+         * @param connection RTCPeerConnection
+         * @param configuration Configuration for RTCPeerConnection
+         * https://developer.mozilla.org/en-US/docs/Web/API/RTCConfiguration
+         */
+        function checkConfiguration(connection, configuration) {
+
+            if (!configuration || !configuration.iceServers) {
+                return;
+            }
+
+            var iceServers = configuration.iceServers;
+            for (var i = 0; i < iceServers.length; i++) {
+
+                var iceServer = iceServers[i];
+                if (!iceServer) {
+                    continue;
+                }
+
+                if (iceServer.url) {
+                    checkWebRTCRequest(connection, iceServer.url);
+                }
+
+                if (iceServer.urls) {
+                    for (var j = 0; j < iceServer.urls.length; j++) {
+                        checkWebRTCRequest(connection, iceServer.urls[j]);
+                    }
+                }
+            }
+        }
+
+        /**
+         * Overrides setConfiguration method
+         * https://developer.mozilla.org/en-US/docs/Web/API/RTCPeerConnection/setConfiguration
+         */
+        if (RealRTCPeerConnection.prototype.setConfiguration) {
+
+            var realSetConfiguration = Function.prototype.call.bind(RealRTCPeerConnection.prototype.setConfiguration);
+
+            RealRTCPeerConnection.prototype.setConfiguration = function (configuration) {
+                configuration = protectConfiguration(configuration);
+                // Call the real method first, so that validates the configuration
+                realSetConfiguration(this, configuration);
+                checkConfiguration(this, configuration);
+            };
+        }
+
+        function WrappedRTCPeerConnection(configuration, arg) {
+
+            if (!(this instanceof WrappedRTCPeerConnection)) {
+                return RealRTCPeerConnection();
+            }
+
+            configuration = protectConfiguration(configuration);
+
+            /**
+             * The old webkitRTCPeerConnection constructor takes an optional second argument and we must pass it.
+             */
+            var connection = new RealRTCPeerConnection(configuration, arg);
+            checkConfiguration(connection, configuration);
+            return connection;
+        }
+
+        WrappedRTCPeerConnection.prototype = RealRTCPeerConnection.prototype;
+
+        var boundWrappedRTCPeerConnection = WrappedRTCPeerConnection.bind();
+        copyProperties(RealRTCPeerConnection, boundWrappedRTCPeerConnection, ["caller", "generateCertificate", "name", "prototype"]);
+        RealRTCPeerConnection.prototype.constructor = boundWrappedRTCPeerConnection;
+
+        if ("RTCPeerConnection" in window) {
+            window.RTCPeerConnection = boundWrappedRTCPeerConnection;
+        }
+        if ("webkitRTCPeerConnection" in window) {
+            window.webkitRTCPeerConnection = boundWrappedRTCPeerConnection;
+        }
+    };
+
+    if (shouldOverrideWebSocket) {
+        overrideWebSocket();
+    }
+
+    if (shouldOverrideWebRTC) {
+        overrideWebRTC();
+    }
+})('wrapper-script-46208009520274507', false, true);
+} catch (ex) { console.error('Error executing AG js: ' + ex); }
+(function () {
+            var current = document.currentScript;
+            var parent = current && current.parentNode;
+            if (parent) {
+                parent.removeChild(current);
+            }
+        })();</script><link type="text/css" rel="stylesheet" id="dark-mode-custom-link"><link type="text/css" rel="stylesheet" id="dark-mode-general-link"><style type="text/css" id="dark-mode-custom-style" lang="en"></style><style type="text/css" id="dark-mode-native-style" lang="en"></style><style type="text/css" id="dark-mode-native-sheet" lang="en"></style><head>
+    <!-- Meta Tags -->
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+    <!-- Mobile Device Meta -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, minimal-ui"> 
+
+    <!-- Theme output -->
+    
+	<!-- This site is optimized with the Yoast SEO plugin v14.2 - https://yoast.com/wordpress/plugins/seo/ -->
+	<title>TEK 4010/4014 Vector Graphics terminal DEMO - Spark Logic</title>
+	<meta name="description" content="PitoFri Jul 14, 2017 6:43 pm The old style vector graphics terminals are still in use, at least here Here is the TEK 4010/14 you may get at ebay most">
+	<meta name="robots" content="index, follow">
+	<meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+	<meta name="bingbot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1">
+	<link rel="canonical" href="https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html">
+	<meta property="og:locale" content="en_US">
+	<meta property="og:type" content="article">
+	<meta property="og:title" content="TEK 4010/4014 Vector Graphics terminal DEMO - Spark Logic">
+	<meta property="og:description" content="PitoFri Jul 14, 2017 6:43 pm The old style vector graphics terminals are still in use, at least here Here is the TEK 4010/14 you may get at ebay most">
+	<meta property="og:url" content="https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html">
+	<meta property="og:site_name" content="Spark Logic">
+	<meta property="article:published_time" content="2019-11-30T15:43:28+00:00">
+	<meta property="og:image" content="https://sparklogic.ru/wp-content/uploads/2019/11/icon_e_smile.gif">
+	<meta name="twitter:card" content="summary_large_image">
+	<script type="application/ld+json" class="yoast-schema-graph">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","@id":"https://sparklogic.ru/#website","url":"https://sparklogic.ru/","name":"Spark Logic","description":"Arduino for STM32","potentialAction":[{"@type":"SearchAction","target":"https://sparklogic.ru/?s={search_term_string}","query-input":"required name=search_term_string"}],"inLanguage":"en-US"},{"@type":"ImageObject","@id":"https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html#primaryimage","inLanguage":"en-US","url":"https://sparklogic.ru/wp-content/uploads/2019/11/icon_e_smile.gif"},{"@type":"WebPage","@id":"https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html#webpage","url":"https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html","name":"TEK 4010/4014 Vector Graphics terminal DEMO - Spark Logic","isPartOf":{"@id":"https://sparklogic.ru/#website"},"primaryImageOfPage":{"@id":"https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html#primaryimage"},"datePublished":"2019-11-30T15:43:28+00:00","dateModified":"2019-11-30T15:43:28+00:00","author":{"@id":"https://sparklogic.ru/#/schema/person/29d123bab113000fce258edca71e7188"},"description":"PitoFri Jul 14, 2017 6:43 pm The old style vector graphics terminals are still in use, at least here Here is the TEK 4010/14 you may get at ebay most","inLanguage":"en-US","potentialAction":[{"@type":"ReadAction","target":["https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html"]}]},{"@type":["Person"],"@id":"https://sparklogic.ru/#/schema/person/29d123bab113000fce258edca71e7188","name":"admin","image":{"@type":"ImageObject","@id":"https://sparklogic.ru/#personlogo","inLanguage":"en-US","url":"https://secure.gravatar.com/avatar/15ef367be79001f9b0b2b36073c441fd?s=96&d=mm&r=g","caption":"admin"}}]}</script>
+	<!-- / Yoast SEO plugin. -->
+
+
+<link rel="dns-prefetch" href="https://fonts.googleapis.com/">
+<link rel="dns-prefetch" href="https://s.w.org/">
+<link rel="alternate" type="application/rss+xml" title="Spark Logic » Feed" href="https://sparklogic.ru/feed">
+<link rel="alternate" type="application/rss+xml" title="Spark Logic » Comments Feed" href="https://sparklogic.ru/comments/feed">
+<link rel="alternate" type="application/rss+xml" title="Spark Logic » TEK 4010/4014 Vector Graphics terminal DEMO Comments Feed" href="https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html/feed">
+		<script type="text/javascript">
+			window._wpemojiSettings = {"baseUrl":"https:\/\/s.w.org\/images\/core\/emoji\/13.0.0\/72x72\/","ext":".png","svgUrl":"https:\/\/s.w.org\/images\/core\/emoji\/13.0.0\/svg\/","svgExt":".svg","source":{"concatemoji":"https:\/\/sparklogic.ru\/wp-includes\/js\/wp-emoji-release.min.js?ver=5.5.5"}};
+			!function(e,a,t){var n,r,o,i=a.createElement("canvas"),p=i.getContext&&i.getContext("2d");function s(e,t){var a=String.fromCharCode;p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,e),0,0);e=i.toDataURL();return p.clearRect(0,0,i.width,i.height),p.fillText(a.apply(this,t),0,0),e===i.toDataURL()}function c(e){var t=a.createElement("script");t.src=e,t.defer=t.type="text/javascript",a.getElementsByTagName("head")[0].appendChild(t)}for(o=Array("flag","emoji"),t.supports={everything:!0,everythingExceptFlag:!0},r=0;r<o.length;r++)t.supports[o[r]]=function(e){if(!p||!p.fillText)return!1;switch(p.textBaseline="top",p.font="600 32px Arial",e){case"flag":return s([127987,65039,8205,9895,65039],[127987,65039,8203,9895,65039])?!1:!s([55356,56826,55356,56819],[55356,56826,8203,55356,56819])&&!s([55356,57332,56128,56423,56128,56418,56128,56421,56128,56430,56128,56423,56128,56447],[55356,57332,8203,56128,56423,8203,56128,56418,8203,56128,56421,8203,56128,56430,8203,56128,56423,8203,56128,56447]);case"emoji":return!s([55357,56424,8205,55356,57212],[55357,56424,8203,55356,57212])}return!1}(o[r]),t.supports.everything=t.supports.everything&&t.supports[o[r]],"flag"!==o[r]&&(t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&t.supports[o[r]]);t.supports.everythingExceptFlag=t.supports.everythingExceptFlag&&!t.supports.flag,t.DOMReady=!1,t.readyCallback=function(){t.DOMReady=!0},t.supports.everything||(n=function(){t.readyCallback()},a.addEventListener?(a.addEventListener("DOMContentLoaded",n,!1),e.addEventListener("load",n,!1)):(e.attachEvent("onload",n),a.attachEvent("onreadystatechange",function(){"complete"===a.readyState&&t.readyCallback()})),(n=t.source||{}).concatemoji?c(n.concatemoji):n.wpemoji&&n.twemoji&&(c(n.twemoji),c(n.wpemoji)))}(window,document,window._wpemojiSettings);
+		</script>
+		<style type="text/css">
+img.wp-smiley,
+img.emoji {
+	display: inline !important;
+	border: none !important;
+	box-shadow: none !important;
+	height: 1em !important;
+	width: 1em !important;
+	margin: 0 .07em !important;
+	vertical-align: -0.1em !important;
+	background: none !important;
+	padding: 0 !important;
+}
+</style>
+	<link rel="stylesheet" id="wp-block-library-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/style.min.css" type="text/css" media="all">
+<link rel="stylesheet" id="anthemes_shortcode_styles-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/anthemes-shortcodes.css" type="text/css" media="all">
+<link rel="stylesheet" id="thumbs_rating_styles-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/style_002.css" type="text/css" media="all">
+<link rel="stylesheet" id="list_mag_wp_style-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/style.css" type="text/css" media="all">
+<link rel="stylesheet" id="list_mag_wp_default-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/default.css" type="text/css" media="all">
+<link rel="stylesheet" id="list_mag_wp_responsive-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/responsive.css" type="text/css" media="all">
+<link rel="stylesheet" id="font-awesome-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/font-awesome.min.css" type="text/css" media="all">
+<link rel="stylesheet" id="jquery-fancybox-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/jquery.fancybox-1.3.4.css" type="text/css" media="all">
+<link rel="stylesheet" id="list_mag_wp_fonts-css" href="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/css.css" type="text/css" media="all">
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/jquery.js" id="jquery-core-js"></script>
+<script type="text/javascript" id="thumbs_rating_scripts-js-extra">
+/* <![CDATA[ */
+var thumbs_rating_ajax = {"ajax_url":"https:\/\/sparklogic.ru\/wp-admin\/admin-ajax.php","nonce":"2fb25b1e8f"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/general.js" id="thumbs_rating_scripts-js"></script>
+<link rel="https://api.w.org/" href="https://sparklogic.ru/wp-json/"><link rel="alternate" type="application/json" href="https://sparklogic.ru/wp-json/wp/v2/posts/513"><link rel="EditURI" type="application/rsd+xml" title="RSD" href="https://sparklogic.ru/xmlrpc.php?rsd">
+<link rel="wlwmanifest" type="application/wlwmanifest+xml" href="https://sparklogic.ru/wp-includes/wlwmanifest.xml"> 
+<meta name="generator" content="WordPress 5.5.5">
+<link rel="shortlink" href="https://sparklogic.ru/?p=513">
+<link rel="alternate" type="application/json+oembed" href="https://sparklogic.ru/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fsparklogic.ru%2Fcode-snipplets%2Ftek-4010-4014-vector-graphics-terminal-demo.html">
+<link rel="alternate" type="text/xml+oembed" href="https://sparklogic.ru/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fsparklogic.ru%2Fcode-snipplets%2Ftek-4010-4014-vector-graphics-terminal-demo.html&amp;format=xml">
+<style type="text/css">ul.meta-icons-home li.trending-lm, .trending-lm .tooltiptext, .sticky-lm .tooltiptext, ul.article_list li ul.meta-icons-home li.trending-lm { background-color: #ffd933 !important;} .trending-lm .tooltiptext::after, .sticky-lm .tooltiptext::after { border-color: transparent transparent #ffd933 !important transparent;} ul.meta-icons-home li.sticky-lm, .sticky-lm .tooltiptext, .listbtn-category, ul.menu-left li a:hover, .single-category a { background-color: #1c7200 !important;} .sticky-lm .tooltiptext::after { border-color: transparent transparent #1c7200 !important transparent;} #infscr-loading, #searchform2 .buttonicon, .my-paginated-posts span, #tags-wrap, #back-top span { background-color: #ff7f00 !important;} h3.index-title i, .widget-title h3 i, .wrap-footer p a, a:hover, .top-social li a:hover, ul.top-social li.search, ul.modern-list li div.modern-list-content p a, ul.modern-grid li div.modern-grid-content p a   { color: #ff7f00 !important;} .main-menu { background-color: #192b33 !important;} .social-section { background-color: #cccc52 !important;} .wrap-footer { background-color: #192b33 !important;} .entry p a { color: #ff7f00 !important;} </style>
+<link rel="icon" href="https://sparklogic.ru/wp-content/uploads/2019/12/favicon.ico" sizes="32x32">
+<link rel="icon" href="https://sparklogic.ru/wp-content/uploads/2019/12/favicon.ico" sizes="192x192">
+<link rel="apple-touch-icon" href="https://sparklogic.ru/wp-content/uploads/2019/12/favicon.ico">
+<meta name="msapplication-TileImage" content="https://sparklogic.ru/wp-content/uploads/2019/12/favicon.ico">
+ 
+<script async="" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/googlesyndication_adsbygoogle.js" crossorigin="anonymous"></script>
+</head>
+<body data-rsssl="1" class="post-template-default single single-post postid-513 single-format-standard">
+
+
+<!-- Begin Header -->
+<header>
+    <div class="main-menu">
+            <!-- Logo -->    
+            <a href="https://sparklogic.ru/"><img class="logo" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/logo.png" alt="Spark Logic"></a>
+
+            <!-- Navigation Menu -->
+                        <nav id="myjquerymenu" class="jquerycssmenu">
+                <ul><li id="menu-item-12" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-home menu-item-12"><a href="https://sparklogic.ru/">Home</a></li>
+</ul>            </nav><!-- end #myjquerymenu -->
+            
+            <ul class="top-social">
+                                <li class="md-trigger search" data-modal="modal-7"><i class="fa fa-search"></i></li>
+            </ul>
+     </div><!-- end .main-menu -->  
+</header><!-- end #header -->
+
+<div class="md-modal md-effect-7" id="modal-7">
+    <div class="md-content">
+      <div>
+        <!-- Search form  -->
+        <button class="md-close"><i class="fa fa-times"></i></button><form id="searchform2" class="header-search" method="get" action="https://sparklogic.ru/">
+    <input placeholder="Search ..." type="text" name="s" id="s">
+    <input type="submit" value="Search" class="buttonicon">
+</form><div class="clear"></div>      </div>
+    </div><!-- end .md-content -->
+</div><!-- end .md-modal -->  
+
+<!-- Begin Content -->
+<div class="wrap-fullwidth">
+
+    <div class="single-content">
+                <div class="entry-top">
+            <div class="single-category"> 
+                <a href="https://sparklogic.ru/code-snipplets" rel="category tag">Code snipplets</a>                <ul class="single-share">
+                    <li><a class="fbbutton fbc-has-badge fbc-UID_1" target="_blank" href="https://www.facebook.com/sharer/sharer.php?u=https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-facebook" aria-hidden="true"></i> <span>Share on Facebook</span></a></li>
+                    <li><a class="twbutton" target="_blank" href="https://twitter.com/home?status=Check%20out%20this%20article:%20TEK%204010/4014%20Vector%20Graphics%20terminal%20DEMO%20-%20https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-twitter"></i></a></li>
+                    <li><a class="pinbutton" target="_blank" href="https://pinterest.com/pin/create/button/?url=https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html&amp;media=&amp;description=TEK%204010/4014%20Vector%20Graphics%20terminal%20DEMO" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-pinterest"></i></a></li>
+                </ul><!-- end .single-share -->
+            </div><!-- end .single-category -->
+            <div class="clear"></div>
+
+            <h1 class="article-title entry-title">TEK 4010/4014 Vector Graphics terminal DEMO</h1>
+                        <div class="clear"></div>
+        </div><div class="clear"></div>
+        
+
+        <article>
+                                    <div class="post post-513 type-post status-publish format-standard hentry category-code-snipplets" id="post-513">
+
+                
+                <div class="entry">
+                    <!-- excerpt -->
+                     
+
+                    <!-- entry content -->
+                    <div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Fri Jul 14, 2017 6:43 pm
+</div>
+</div>
+<div class="posttext">The old style vector graphics terminals are still in use, at least here <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"><br>
+Here is the TEK 4010/14 you may get at ebay most probably..<p></p>
+<p><a href="https://www.youtube.com/watch?v=IztxeoHhoyM" class="postlink">https://www.youtube.com/watch?v=IztxeoHhoyM</a></p>
+<p>Have a look at the beautiful way those old vector graphics terminals worked..  <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_cool.gif" alt="8-)" title="Cool" width="15" height="17"> </p>
+<p><a href="https://en.wikipedia.org/wiki/Tektronix_4010" class="postlink">https://en.wikipedia.org/wiki/Tektronix_4010</a></p>
+<p>To try with vector based graphics at home, and today, you may try the
+ simple Demo below – all you need is a BluePill or something like that 
+and TeraTerm terminal, or something like that..  <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"> </p>
+<p>UPDATE: added printing out the elapsed time, added GIN, added Sprites, added defines for colors, line styles and font sizes<br>
+<code>// A simple TEK4010/4014 Graphics Vector terminal - DEMO<br>
+// You need ie. TeraTerm or Xterm switched into TEK4010/14 Emulation<br>
+// The current vector's addressing is 1024x1024 (10bit)<br>
+//<br>
+// Loosely inspired by<br>
+// http://www.ne.jp/asahi/shared/o-family/ElecRoom/AVRMCOM/TEK4010/TEK4010gdisp.html<br>
+// and other related information found on the web<br>
+//<br>
+// Provided as-is, no warranties of any kind are provided :)<br>
+// by Pito 7/2017</code></p><code>
+<p>#include "Arduino.h"</p>
+<p>void setup() {<br>
+delay(3000);  // Wait for USB<br>
+Serial.begin(115200);<br>
+}</p>
+<p>void loop() {</p>
+<p>// Draw some primitives on the screen for fun<br>
+// Origin (0,0) is the left bottom corner, y| __x</p>
+<p>uint32_t elapsed = micros();</p>
+<p>Tekcls();<br>
+Tekcolor(2);<br>
+Tekgraph(4);<br>
+Tekpoint(100, 100);<br>
+Tekpoint(200, 100);<br>
+Tekpoint(200, 200);<br>
+Tekpoint(100, 200);</p>
+<p>Tekcolor(3);<br>
+for (uint32_t i = 300; i &lt; 500; i = i + 10) {<br>
+Tekline(i, 400, i, 600);<br>
+}</p>
+<p>Tekstyle(0);</p>
+<p>Tekline(300, 300, 500, 500);<br>
+Tekstyle(1);<br>
+Tekline(600, 400, 200, 300);<br>
+Tekstyleb(2);<br>
+Tekcolor(7);<br>
+Tekplot(10, 700);<br>
+Tekplot(500, 30);<br>
+Tekstyle(3);<br>
+Tekline(400, 600, 100, 800);<br>
+Tekcolor(4);<br>
+Tekstyleb(4);<br>
+Tekplot(300, 330);</p>
+<p>Tekalpha();</p>
+<p>Tekfont(1);<br>
+Teklocate(700, 400);<br>
+Tekcolor(6);<br>
+Serial.println("Hello World !!");</p>
+<p>Tekfont(2);<br>
+Tekcolor(1);<br>
+Teklocate(700, 300);<br>
+Serial.println("STM32duino !!");</p>
+<p>Tekfont(0);<br>
+Tekcolor(2);<br>
+Teklocate(500, 200);<br>
+Serial.println("THIS IS A TEST OF TEK4014 !!");</p>
+<p>Tekcolor(1);<br>
+Tekstyle(0);<br>
+Tekbox(300, 200, 600, 600);</p>
+<p>Tekcolor(2);<br>
+Tekstyle(0);<br>
+Tekdot(150, 150);</p>
+<p>uint32_t i;</p>
+<p>for (i = 0; i &lt; 360; i++) {<br>
+float q = i;<br>
+q = 3.141592f * q / 180.0f;<br>
+float r = cosf(q);<br>
+q = sinf(q);<br>
+q = q * 120.0f;<br>
+q = q + 195.0f;<br>
+r = r * 120.0f;<br>
+r = r + 580.0f;<br>
+Tekdot((uint16_t) r, (uint16_t) q);<br>
+}</p>
+<p>Tekcolor(5);</p>
+<p>for (i = 0; i &lt; 360; i++) {<br>
+float q = i;<br>
+q = 3.141592f * q / 180.0f;<br>
+q = sinf(q);<br>
+q = q * 150.0f;<br>
+q = q + 195.0f;<br>
+float r = i + 30.0f;<br>
+Tekdot((uint16_t) r, (uint16_t) q);<br>
+}</p>
+<p>uint32_t a = 450;<br>
+for (i = 1; i &lt; 34; i++) {<br>
+Tekline(0, 450, 1000, a);<br>
+a = a + 10;<br>
+}</p>
+<p>Tekalpha();<br>
+Teklocate(400, 100);</p>
+<p>elapsed = micros() - elapsed;<br>
+Serial.print("Elapsed: ");<br>
+Serial.print(elapsed);<br>
+Serial.println(" micros");</p>
+<p>delay(5000);<br>
+}</p>
+<p>// ********************************************************<br>
+// TEK4010/4014 basic 10bit commands library<br>
+// For details consult the TEK4010/4014 manual<br>
+// Pito 7/2017 for stm32duino<br>
+// ********************************************************</p>
+<p>// Colors for print, plot, dot<br>
+#define black 0<br>
+#define red 1<br>
+#define green 2<br>
+#define yellow 3<br>
+#define blue 4<br>
+#define magenta 5<br>
+#define cyan 6<br>
+#define white 7</p>
+<p>// Line styles<br>
+#define solid 0<br>
+#define dotted 1<br>
+#define dash_dotted 2<br>
+#define short_dashed 3<br>
+#define long_dashed 4</p>
+<p>// Font sizes<br>
+#define large 0<br>
+#define normal 1<br>
+#define small 2<br>
+#define smallest 3</p>
+<p>// Clear Tek screen<br>
+void Tekcls() {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x0c);<br>
+//Serial.write(0x0d);Serial.write(0x0a);<br>
+}</p>
+<p>// Select a color (0-7)<br>
+void Tekcolor(uint8_t color) {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x5b);<br>
+Serial.write(0x33);<br>
+Serial.write(0x30 + color);<br>
+Serial.write(0x6d);<br>
+}</p>
+<p>// Switch to graphical mode with a line style (0-4)<br>
+void Tekgraph(uint8_t style) {<br>
+Serial.write(0x1D);<br>
+Serial.write(0x1B);<br>
+Serial.write(style | 0x60);<br>
+}</p>
+<p>// Select a font size (0-3) for printing alphanumeric strings<br>
+// The actual font type has to be set in the Emulator<br>
+void Tekfont(uint8_t fontsize) {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x38 + fontsize);<br>
+}</p>
+<p>// Normal style lines (0-4)<br>
+void Tekstyle(uint8_t style) {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x60 + style);<br>
+}</p>
+<p>// Bold style lines (??)<br>
+void Tekstyleb(uint8_t style) {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x68 + style);<br>
+}</p>
+<p>// Switch to alphanumeric mode<br>
+void Tekalpha() {<br>
+Serial.write(0x1f);<br>
+}</p>
+<p>// Draw a point as a small cross (??)<br>
+void Tekpoint(uint16_t x, uint16_t y) {<br>
+Serial.write(0x1C);  // FS<br>
+Serial.write(0x20 + ((y &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x60 + ((y) &amp; 0x1F));<br>
+Serial.write(0x20 + ((x &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x) &amp; 0x1F));<br>
+}</p>
+<p>// Draw a single dot<br>
+void Tekdot(uint16_t x, uint16_t y) {<br>
+Serial.write(0x1D);  // GS<br>
+Serial.write(0x20 + ((y &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x60 + ((y) &amp; 0x1F));<br>
+Serial.write(0x20 + ((x &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x) &amp; 0x1F));<br>
+}</p>
+<p>// Draw a line from (x1, y1) to (x2, y2)<br>
+void Tekline(uint16_t x1, uint16_t y1, uint16_t x2, uint16_t y2) {<br>
+Serial.write(0x1D);  // GS<br>
+Serial.write(0x20 + ((y1 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x60 + ((y1) &amp; 0x1F));<br>
+Serial.write(0x20 + ((x1 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x1) &amp; 0x1F));<br>
+Serial.write(0x20 + ((y2 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x60 + ((y2) &amp; 0x1F));<br>
+Serial.write(0x20 + ((x2 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x2) &amp; 0x1F));<br>
+}</p>
+<p>// Continue with drawing a line to (x1, y1)<br>
+void Tekplot(uint16_t x1, uint16_t y1) {<br>
+Serial.write(0x20 + ((y1 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x60 + ((y1) &amp; 0x1F));<br>
+Serial.write(0x20 + ((x1 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x1) &amp; 0x1F));<br>
+}</p>
+<p>// Locate a point where to print a string<br>
+void Teklocate(uint16_t x1, uint16_t y1) {<br>
+Serial.write(0x1D);  // GS<br>
+Serial.write(0x20 + ((y1 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x60 + ((y1) &amp; 0x1F));<br>
+Serial.write(0x20 + ((x1 &gt;&gt; 5) &amp; 0x1F));<br>
+Serial.write(0x40 + ((x1) &amp; 0x1F));<br>
+Tekalpha();<br>
+}</p>
+<p>// Draw a box with left bottom corner at (bx, by) and top right corner at (tx, ty)<br>
+void Tekbox(uint16_t bx, uint16_t by, uint16_t tx, uint16_t ty) {<br>
+Tekline(bx, by, tx, by);<br>
+Tekplot(tx, ty);<br>
+Tekplot(bx, ty);<br>
+Tekplot(bx, by);<br>
+}</p>
+<p>// Draw small sprites<br>
+void Teksprite(char* sprite) {<br>
+Serial.write(0x1E);<br>
+Serial.print(sprite);<br>
+}</p>
+</code><p><code>// Go to the Graphics-IN mode<br>
+void Tekgin() {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x1A);<br>
+}</code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Fri Jul 14, 2017 8:39 pm
+</div>
+</div>
+<div class="posttext">Interesting, I didn’t know that Teraterm understands TEK4010/4014.<br>
+Some time ago I adapted mcurses:<br>
+<a href="https://github.com/ChrisMicro/mcurses" class="postlink">https://github.com/ChrisMicro/mcurses</a></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sat Jul 15, 2017 9:04 am
+</div>
+</div>
+<div class="posttext">Not only TeraTerm understands Tek4010/4014 vector graphics, but “xterm” too. <br>
+Linux users may try..<br>
+Xterm:<br>
+<cite>The Tektronix 4014 emulation is also fairly good. It supports 
+12-bit graphics addressing, scaled to the window size. Four different 
+font sizes and five different lines types are supported.</cite><p></p>
+<p>12bit vector addressing requires small changes in the routines (I 
+currently use 10bits for x and y), but allows you to draw at 4096×4096 
+large screen.. You can hardly get such a TFT connected to your BluePill 
+soon..  <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_razz.gif" alt=":P" title="Razz" width="15" height="17"></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sat Jul 15, 2017 12:26 pm
+</div>
+</div>
+<div class="posttext">And a .bin for F103 (96kB) with more action on the screen..<img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"><br>
+SerialUSB. Set font to Lucida or Consolas in the Tek window for a better retro look ..<p></p>
+<dl class="file">
+<dt><span class="imageset icon_topic_attach"></span> <a class="postlink" href="http://web.archive.org/web/20190316154747/https://www.stm32duino.com//download/file.php?id=1788">TEK4014_DEMO.rar</a></dt>
+<dd>(48.92 KiB) Downloaded 48 times</dd>
+</dl>
+</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sun Jul 16, 2017 7:10 am
+</div>
+</div>
+<div class="posttext">Updated above bin with new USB driver. You have to get about 61msecs with first screen.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Mon Jul 17, 2017 9:12 am
+</div>
+</div>
+<div class="posttext">Just for fun I added you TEK-functions to GuiPiitx:<br>
+<a href="https://github.com/ChrisMicro/GuiPittix/blob/master/TFT_TEK_wrapper.h" class="postlink">https://github.com/ChrisMicro/GuiPittix … _wrapper.h</a><br>
+Now the LED blinking example and the number example can drive the TEK-display ( dynamically  <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_biggrin.gif" alt=":D" title="Very Happy" width="15" height="17">  ).<br>
+The other examples require a touch-input which I could not achieve with 
+teraterm. It seems when I click on the teraterm window it is not sending
+ back the mouse position.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 17, 2017 10:11 am
+</div>
+</div>
+<div class="posttext">In order to get the mouse position, you shall first switch into GIN mode.<br>
+Not tested:<br>
+<code>// Go to the Graphics-IN mode<br>
+void Tekgin() {<br>
+Serial.write(0x1B);<br>
+Serial.write(0x1A);<br>
+}</code></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 17, 2017 11:08 am
+</div>
+</div>
+<div class="posttext">With this quick hack you may see you get data off the mouse movements and clicking/pressing buttons in GIN mode:<br>
+<code>  char b0, b1, b2, b3 , b4;<br>
+Tekgin();  // set the Graphics-IN mode<br>
+Teklocate(200, 600);  // from here we want printout results<br>
+while(1) {<br>
+Tekgin();  // GIN mode<br>
+if (Serial.available() &gt; 0) b0 = Serial.read();  // Get pressed buttons/mouse code<br>
+if (Serial.available() &gt; 0) b1 = Serial.read();  // cross hair coordinates<br>
+if (Serial.available() &gt; 0) b2 = Serial.read();  // cross hair coordinates<br>
+if (Serial.available() &gt; 0) b3 = Serial.read();  // cross hair coordinates<br>
+if (Serial.available() &gt; 0) b4 = Serial.read();  // cross hair coordinates<br>
+Tekalpha();  // go to alpha mode<br>
+Tekfont(2);<br>
+Tekcolor(6);<br>
+Serial.print(b0, HEX);Serial.print("   ");  // print out the stuff<br>
+Serial.print(b1, HEX);Serial.print(" ");<br>
+Serial.print(b2, HEX);Serial.print(" ");<br>
+Serial.print(b3, HEX);Serial.print(" ");<br>
+Serial.println(b4, HEX);<br>
+delay(500);<br>
+}</code></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 17, 2017 11:33 am
+</div>
+</div>
+<div class="posttext">There is also an “Incremental plot mode” for drawing smaller “sprites”  <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_razz.gif" alt=":P" title="Razz" width="15" height="17"> <br>
+Not tested.<br>
+<code>// Draw small sprites<br>
+void Teksprite(char* sprite) {<br>
+Serial.write(0x1E);<br>
+Serial.print(sprite);<br>
+}</code></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Mon Jul 17, 2017 2:53 pm
+</div>
+</div>
+<div class="posttext">Pito, where did you find the specification?<br>
+I found some  <a href="https://github.com/lauringlab/CodonShuffle/blob/4c408e1a8617f2a52dcb0329bba9617e1be17313/lib/EMBOSS-6.6.0/plplot/tek.c" class="postlink">github resource</a> which could be useful.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 17, 2017 3:52 pm
+</div>
+</div>
+<div class="posttext">None spec, googling only..<br>
+Here is the Fleet consisting of 625 Type 26 frigates, created by<br>
+<code>  Tekcolor(green);<br>
+char* sprite;<br>
+// Type 26 frigate<br>
+sprite = "PAAAAAAAAAAAAAADDBBBDDBBBHHBBBDDBBBHHBBHH";<br>
+elapsed = micros();<br>
+for(i=100; i&lt;600; i=i+20){<br>
+for(a=100; a&lt;600; a=a+20){<br>
+Teklocate(i, a);<br>
+Teksprite(sprite);<br>
+}<br>
+}<br>
+elapsed = micros() - elapsed;<br>
+Tekalpha();<br>
+Tekfont(normal);<br>
+Teklocate(100, 50);<br>
+Serial.print("Elapsed: ");<br>
+Serial.print(elapsed);<br>
+Serial.println(" micros");</code></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sat Jul 22, 2017 9:12 am
+</div>
+</div>
+<div class="posttext">As a proof of concept I’ve tried with the Tek terminal as a screen of a diy Spectrum Analyser (1024 point CMSIS fp FFT).<br>
+Fed by my old dyi siggen into the 12bit ADC (Black F407ZE), the ADC 
+input centered by 2x 10k resistors and coupled to the siggen via 100uF 
+cap (all put on a solder-less breadboard, long wires, +Vref is the 
+Black’s Vdd), and the video-streaming done via SerialUSB into the Tek 
+Terminal (TeraTerm Win7).<br>
+The Tek terminal is perfectly usable, the Tekcls() and Serial.printing 
+of numbers causes a short blink sometimes, but drawing 512 spectra 
+(lines or dots) itself is fast, realtime. Avoiding the Tekcls() and 
+minimizing Serial.printing will do it realtime.<br>
+Below a ~30kHz sin signal:<br>
+1. signal’s generator output level at zero – you may see there is still a
+ signal leakage off the siggen output, however (the noise floor is 
+something like 200uVpeak).<br>
+2. with ADC not over-driven<br>
+3. with ADC over-driven..<p></p>
+<dl class="file">
+<dt class="attach-image"><img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/img_5de2a4b5f2196.webp" class="postimage" alt="FFT_Siggen_1.JPG" onclick="viewableArea(this);"></dt>
+<dd>FFT_Siggen_1.JPG (36.85 KiB) Viewed 783 times</dd>
+</dl>
+</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Sat Jul 22, 2017 10:41 am
+</div>
+</div>
+<div class="posttext">Thanks<p></p>
+<p>This could be really useful.</p>
+<p>Putting it into a library would IMHO be the next logic step</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sat Jul 22, 2017 12:19 pm
+</div>
+</div>
+<div class="posttext">There are the updated routines in the first post. With defines for colors, fontsizes and line styles.<br>
+Still the none_CLS way of updating the screen content has to be elaborated.<br>
+My idea is to rewrite the dynamic information on the screen with the 
+previous information but with black ink (with the background color), 
+thus erase it before writing the new one.<br>
+Like:<br>
+<code>Tekcolor(green);<br>
+Teklocate(200,200);<br>
+Serial.print("Hello World");<br>
+Tekbox(100,100,700,700);<br>
+do_something();<br>
+// Delete the above info only, no Tekcls()<br>
+Tekcolor(black);<br>
+Teklocate(200,200);<br>
+Serial.print("Hello World");<br>
+Tekbox(100,100,700,700);<br>
+// .. deleted from screen<br>
+..</code></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sat Jul 22, 2017 12:48 pm
+</div>
+</div>
+<div class="posttext">This doc<br>
+<a href="http://vt100.net/docs/vt3xx-gp/chapter13.html#S13.14" class="postlink">http://vt100.net/docs/vt3xx-gp/chapter13.html#S13.14</a><br>
+shows following table – how the Tek coordinates are sent, and how the “short version” of sending the coordinates works.<p></p>
+<p>The key message here is, the last byte (Low X) is the byte which triggers the actual beam on, and does the draw..<br>
+The Tek includes a 5 bytes large “video buffer” where the internal logic
+ detects the upper 2 bits (the “Tag bits”) of incoming ASCII chars 
+(actually bit 6 and 5 of a byte), and based on the sequence and the 
+value decides what to do next. </p>
+<p>When somebody needs the 12bits 4k x 4k mode, an additional “Extra” 
+byte with top bits of each four coordinates must be sent as the second Y
+ coordinate. The terminal shall detect that automatically and enhance 
+the size.<br>
+Note: we do not send the Extra byte yet.</p>
+<dl class="file">
+<dt class="attach-image"><img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/img_5de2a4b7d5db5.webp" class="postimage" alt="Tek Encoding the coordinates.JPG" onclick="viewableArea(this);"></dt>
+<dd>Tek Encoding the coordinates.JPG (72.9 KiB) Viewed 757 times</dd>
+</dl>
+</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sat Jul 22, 2017 4:05 pm
+</div>
+</div>
+<div class="posttext">While deleting lines by overwriting them with the 
+background ink works perfectly, overwriting the chars is leaving a weak 
+artifacts like here<p></p>
+<dl class="file">
+<dt class="attach-image"><img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/img_5de2a4bbba041.webp" class="postimage" alt="Font Artifacts.JPG" onclick="viewableArea(this);"></dt>
+<dd>Font Artifacts.JPG (15.58 KiB) Viewed 734 times</dd>
+</dl>
+</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Sat Jul 22, 2017 9:42 pm
+</div>
+</div>
+<div class="posttext">Excellent work..</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Sun Jul 23, 2017 5:44 am
+</div>
+</div>
+<div class="posttext">Did I miss the source code?</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Sun Jul 23, 2017 7:06 am
+</div>
+</div>
+<div class="posttext">First post contained most of the code<p></p>
+<p><a href="http://stm32duino.com/viewtopic.php?f=18&amp;t=2336#p31430" class="postlink">viewtopic.php?f=18&amp;t=2336#p31430</a></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Sun Jul 23, 2017 7:25 am
+</div>
+</div>
+<div class="posttext">I made it into a library<p></p>
+<p>Not perfect…</p>
+<p>#defines should be properties</p>
+<p>Please feel free to fix this  and generally improve it</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sun Jul 23, 2017 10:44 am
+</div>
+</div>
+<div class="posttext">@Roger: Thanks!<br>
+The next improvements could be:<br>
+1. introducing ie Tekplotv and Tekploth – vertical and horizontal lines with short addressing<br>
+2. Tekbox with short addressing<br>
+4. introducing the 12bit mode<br>
+5. when talking “a perfect library” – the most difficult part would be 
+to create a mechanism for a redraw of the the dynamic information on the
+ Tek screen by overwriting it by the background ink color and printing 
+the new one.<br>
+It is basically easy with a couple of values, but when you draw a lot of
+ strings, arrays (in form of lines/dots/sprites), you have to memorize 
+all the “old_values”, and when they change and need to be print out you 
+have to rewrite their picture with the old_value (with background ink 
+color) on the exact same place and print the new value with the actual 
+ink color on the exact same place..<br>
+And it is not only a single action like Serial.print or Tekplot(), but 
+it could be a process – ie. to redraw a “spectrum”, “waves”, small 
+picture..<br>
+Not easy..<br>
+There is a workaround of course – you can Tekcls() and draw a new 
+complete picture with new values, it is fast enough for most apps.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Sun Jul 23, 2017 12:08 pm
+</div>
+</div>
+<div class="posttext">Another demo you may try or add to the library.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Sun Jul 23, 2017 11:10 pm
+</div>
+</div>
+<div class="posttext">That demo worked OK for me.<p></p>
+<p>I just put the library files into a folder inside the libraries folder</p>
+<p>I wonder if there should be a function to display the text.  I know 
+that Serial.print and serial.println work fine, but it seems strange to 
+not need a TEK specific command to do this</p>
+<p>I may just add tek.print and tek.println which just call serial.print and serial.println </p>
+<p>Also I think it may be useful to pass the serial port to the library as its hard coded to “Serial”</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 8:24 am
+</div>
+</div>
+<div class="posttext"><cite>I may just add tek.print and tek.println which just call serial.print and serial.println </cite><br>
+Yes, that is ok.<br>
+There is one issue with Serial.print – it cannot print the scientific notation – like: -3.45E-6.<br>
+So we have to use something instead, which can do..<p></p>
+<p>PS: the Tek terminal, when in alpha mode (Tekalpha()), works like a standard “char based terminal”.<br>
+The font size parameter (Tekfont(), see our defines in lib) determines its lines/chars volume:</p>
+<p>large – 35 lines of 74 characters<br>
+normal – 38 lines of 81 characters<br>
+small – 58 lines of 121 characters<br>
+smallest –  64 lines of 133 characters</p>
+<p>The actual font type used could be set in Tek’s Setup-&gt;Font.<br>
+The color emulation and the background color could be set in Tek’s Setup -&gt; Window.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Mon Jul 24, 2017 8:42 am
+</div>
+</div>
+<div class="posttext"><cite>I may just add tek.print and tek.println which just call serial.print and serial.println </cite><p></p>
+<p>I did this <a href="https://github.com/ChrisMicro/GuiPittix/blob/master/TFT_TEK_wrapper.h" class="postlink">here</a>.<br>
+So all Adafruit-GFX functions use the TEK Terminal as output.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 8:52 am
+</div>
+</div>
+<div class="posttext">@Chris: mind the tek terminal is not well suited for drawing filled primitives, as there is not such command afaik..<br>
+Adafruit is pixel-oriented, tek is vector oriented with the “draw a line from A,B to C,D” as the only graphics primitive..<br>
+Rendering adafruits demos with tek emulation may work, but it will take ages, I would guess <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 10:22 am
+</div>
+</div>
+<div class="posttext">This is a test of alpha terminal mode.<br>
+<code>// A simple TEK4010/4014 Vector terminal DEMO<br>
+// You need TeraTerm or Xterm switched to TEK4010/14 Emulation<br>
+//<br>
+// Use fast Serial over USB for best experience<br>
+//<br>
+//  Shows alpha terminal mode<br>
+//<br>
+// Provided as-is, no warranties of any kind are provided :)<br>
+// by Pito 7/2017<p></p>
+<p>#include "Arduino.h"<br>
+#include "Tek.h"</p>
+<p>TEK tek;</p>
+<p>void setup() {<br>
+delay(3000);<br>
+Serial.begin(115200);<br>
+}</p>
+<p>void loop() {</p>
+<p>uint32_t i;</p>
+<p>tek.Tekcls();</p>
+<p>tek.Tekfont(normal);<br>
+tek.Tekcolor(yellow);<br>
+tek.Tekalpha();<br>
+tek.Teklocate(100, 700);</p>
+<p>for (i = 0; i &lt; 20; i++) {<br>
+Serial.println("Hello World from STM32duino!");<br>
+}</p>
+<p>delay(2000);</p>
+<p>tek.Tekcolor(cyan);<br>
+char* sprite;<br>
+// Type 26 frigate<br>
+sprite = "PAAAAAAAAAAAAAADDBBBDDBBBHHBBBDDBBBHHBBHH";<br>
+tek.Tekgraph(solid);<br>
+for(i=350; i&lt;480; i=i+20){<br>
+for(uint32_t a=300; a&lt;400; a=a+20){<br>
+tek.Teklocate(i, a);<br>
+tek.Teksprite(sprite);<br>
+}<br>
+}</p>
+<p>delay(2000);</p>
+<p>tek.Tekfont(smallest);<br>
+tek.Tekcolor(green);<br>
+tek.Tekalpha();<br>
+tek.Teklocate(100, 300);</p>
+<p>for (i = 0; i &lt; 80; i++) {<br>
+Serial.println("This is a test of Tek Terminal..");<br>
+}</p>
+<p>delay(5000);</p>
+</code><p><code>}</code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Mon Jul 24, 2017 10:50 am
+</div>
+</div>
+<div class="posttext">@pito<p></p>
+<p>We could write some code to turn a scientific notation numbers into a string before sending to serial.print</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 11:01 am
+</div>
+</div>
+<div class="posttext">@Roger: here is the float2string code I used to use within our fpu exercise..<br>
+I have to double check as there is a davekw7x version floating around which has got a bug.<br>
+<a href="http://www.stm32duino.com/viewtopic.php?f=39&amp;t=2001&amp;hilit=pito+fpu&amp;start=60#p26771" class="postlink">http://www.stm32duino.com/viewtopic.php … =60#p26771</a><br>
+This version below shall utilize the single precision FPU when on.<br>
+UPDATE: chnged to 7 digits, fair enough for the single precision..<br>
+<code>// ====== float2s(): print out up to 7 digits of input single-precision value<br>
+// This version enables single-precision for STM32duino, Teensy 3, etc.<br>
+// from double2s version by J.Beale March 2013<br>
+// modified from original float2s() posted by davekw7x on December, 2010<br>
+// http://arduino.cc/forum/index.php/topic,46931.0.html<br>
+// Modded for single precision floats with FPU by Pito 4,7/2017<br>
+// No warranties of any kind, provided as-is..<p></p>
+<p>char * float2s(float f)<br>
+{<br>
+return float2s(f, 2);<br>
+}</p>
+<p>char * float2s(float f, unsigned int digits) {<br>
+int d;<br>
+static char s[26];  // formatted number as string<br>
+int index=0;</p>
+<p>// handle sign<br>
+if (f &lt; 0.0f)<br>
+{<br>
+s[index++] = '-';<br>
+f = -f;<br>
+}<br>
+// handle infinite values<br>
+if (isinf(f))<br>
+{<br>
+strcpy(&amp;s[index], "INF");<br>
+return s;<br>
+}<br>
+// handle Not a Number<br>
+if (isnan(f))<br>
+{<br>
+strcpy(&amp;s[index], "NaN");<br>
+return s;<br>
+}</p>
+<p>// max digits<br>
+if (digits &gt; 7) digits = 7;<br>
+int exponent = int(log10f(f));<br>
+float g = f / powf(10.0f, exponent);<br>
+if ((g &lt; 1.0f) &amp;&amp; (g != 0.0f))<br>
+{<br>
+g *= 10.0f;<br>
+exponent--;<br>
+}<br>
+// if (exponent &lt; -330) {  // lower limit of double-precision on Teensy 3<br>
+if (exponent &lt; -38) {<br>
+g = 0.0f;<br>
+exponent = 0;<br>
+}<br>
+if (digits &lt; 7) {  // display number rounded at last digit<br>
+g += 0.5f / powf(10.0f,digits);<br>
+}</p>
+<p>d = g;<br>
+sprintf(&amp;s[index++],"%d",d);<br>
+if (digits &gt; 0) sprintf(&amp;s[index++],".");<br>
+for (int i=0;i&lt;digits;i++) {<br>
+g = (g - d) * 10.0f;  // shift one decimal place to the left<br>
+d = int(g);<br>
+sprintf(&amp;s[index++],"%d",d);<br>
+}<br>
+sprintf(&amp;s[index], "e%+d", exponent);<br>
+return s;<br>
+} // ===== end float2s()</p>
+</code><p><code></code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 3:52 pm
+</div>
+</div>
+<div class="posttext">In this 25y+ old newsgroup board<br>
+<a href="ftp://invisible-island.net/shuford/terminal/tektronix_news.txt" class="postlink">ftp://invisible-island.net/shuford/term … x_news.txt</a><br>
+I found some info on the GIN mode and mouse coordinates:<br>
+<code>There are 2 modes of reading the GIN co-ordinates, interactive and<br>
+non-interactive.<p></p>
+<p>Interactive mode: the Xhair cursor is displayed, the operator moves it<br>
+to the required position and then presses a key (NOT the return key!).<br>
+A sequence of bytes is sent to the computeras follows:</p>
+<p>The ASCII value of the key pressed e.g. D<br>
+HiX byte - 01 followed by the 5 most significant X bits<br>
+LoX byte - 01 followed by the 5 least significant X bits<br>
+HiY byte - 01 followed by the 5 most significant Y bits<br>
+LoY byte - 01 followed by the 5 least significant Y bits</p>
+<p>This sequence is followed by the termination character(s) as set by<br>
+a jumper set on the TC2 card within the terminal. The most common<br>
+setting is to send the CR character.</p>
+<p>To recreate the X and Y values:</p>
+<p>X=(32*(HiX-32))+(LoX-32)<br>
+Y=(32*(HiY-32))+(LoY-32)</p>
+</code><p><code>In non-interactive mode the computer sends &lt;ESC&gt;&lt;ENQ&gt;. The sequence<br>
+returned is as above, except that the keycode is replaced by a status<br>
+byte, this gives information as to whether the terminal is in Alpha,<br>
+Graphics or GIN mode. I cannot at the moment remember which bit does<br>
+what.</code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Mon Jul 24, 2017 4:02 pm
+</div>
+</div>
+<div class="posttext">If you take a look into the <a href="https://github.com/lauringlab/CodonShuffle/blob/4c408e1a8617f2a52dcb0329bba9617e1be17313/lib/EMBOSS-6.6.0/plplot/tek.c" class="postlink">TEK-Source</a> I posted earlier in this thread, you can see in line 869 a description and the decoding of the GIN data.<p></p>
+<p>There is a distinction of 2 cases:</p>
+<p><code>/*--------------------------------------------------------------------------*\<br>
+* decode_gin()<br>
+*<br>
+* Decodes a GIN tek vector string into an xy pair of relative device<br>
+* coordinates.  It's best to not use absolute device coordinates since the<br>
+* coordinate bounds are different depending on the report encoding used.<br>
+*<br>
+* Standard:	&lt;HiX&gt;&lt;LoX&gt;&lt;HiY&gt;&lt;LoY&gt;<br>
+* Extended:	&lt;HiY&gt;&lt;Extra&gt;&lt;LoY&gt;&lt;HiX&gt;&lt;LoX&gt;<br>
+*<br>
+* where &lt;Extra&gt; holds the two low order bits for each coordinate.<br>
+\*--------------------------------------------------------------------------*/</code></p><code>
+<p>static void<br>
+decode_gin(char *c, PLGraphicsIn *gin)<br>
+{<br>
+int x, y, lc = strlen(c);</p>
+<p>if (lc == 4) {<br>
+x = ((c[0] &amp; 0x1f) &lt;&lt; 5) +<br>
+((c[1] &amp; 0x1f)     );</p>
+<p>y = ((c[2] &amp; 0x1f) &lt;&lt; 5) +<br>
+((c[3] &amp; 0x1f)     );</p>
+<p>gin-&gt;pX = x;<br>
+gin-&gt;pY = y;<br>
+gin-&gt;dX = x / (double) TEKX;<br>
+gin-&gt;dY = y / (double) TEKY;<br>
+}<br>
+else if (lc == 5) {<br>
+y = ((c[0] &amp; 0x1f) &lt;&lt; 7) +<br>
+((c[2] &amp; 0x1f) &lt;&lt; 2) +<br>
+((c[1] &amp; 0x06) &gt;&gt; 2);</p>
+<p>x = ((c[3] &amp; 0x1f) &lt;&lt; 7) +<br>
+((c[4] &amp; 0x1f) &lt;&lt; 2) +<br>
+((c[1] &amp; 0x03)     );</p>
+</code><p><code>gin-&gt;pX = x;<br>
+gin-&gt;pY = y;<br>
+gin-&gt;dX = x / (double) (TEKX &lt;&lt; 2);<br>
+gin-&gt;dY = y / (double) (TEKY &lt;&lt; 2);<br>
+}<br>
+else {			/* Illegal encoding */<br>
+gin-&gt;pX = 0;<br>
+gin-&gt;pY = 0;<br>
+gin-&gt;dY = 0;<br>
+gin-&gt;dX = 0;<br>
+}<br>
+}</code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 4:57 pm
+</div>
+</div>
+<div class="posttext">Look at my previous post, the best way is to read TTerm’s source <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"><br>
+Very nice written, easy to read. TT knows more than I expected <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"><br>
+Frankly, I cannot find TTerm’s help or documentation for TEK emulation options.. <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_confused.gif" alt=":?" title="Confused" width="15" height="17"> <br>
+So we have to read the sources.<p></p>
+<p>From what I’ve read the GIN mode returns always 10bit values, even you are in 12bit mode..<br>
+TT does in the source:<br>
+<code>  ToggleCrossHair(tk,ts,FALSE);<br>
+X = (int)((float)tk-&gt;GINX /<br>
+(float)tk-&gt;ScreenWidth * (float)ViewSizeX);<br>
+Y = (int)((1.0 - (float)(tk-&gt;GINY+1) /<br>
+(float)tk-&gt;ScreenHeight) * (float)ViewSizeY);<br>
+Code[0] = KeyCode;<br>
+Code[1] = (X &gt;&gt; 7) + 32;<br>
+Code[2] = ((X &gt;&gt; 2) &amp; 0x1f) + 32;<br>
+Code[3] = (Y &gt;&gt; 7) + 32;<br>
+Code[4] = ((Y &gt;&gt; 2) &amp; 0x1f) + 32;<br>
+Code[5] = 0x0d;</code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 7:56 pm
+</div>
+</div>
+<div class="posttext">This Mouse demo shows the returned coordinates. Coordinates work as expected.<br>
+I get “[36m20” as the mouse button return code – most probably an escape sequence.<p></p>
+<p>UPDATE: <br>
+“[36m” is the escape code for cyan color. <br>
+When I changed to yellow, I got [33m – the escape code for yellow.<br>
+Thus it returns the actual active color. Interesting..  <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_cool.gif" alt="8-)" title="Cool" width="15" height="17"> </p>
+<p>The “0x20” is the code for “space”, that is the default TEKGINMouseCode for left button (tterm .ini).<br>
+You may change it.</p>
+<p><code>// A simple TEK4010/4014 Vector terminal DEMO<br>
+// You need TeraTerm or Xterm switched to TEK4010/14 Emulation<br>
+//<br>
+// Use fast Serial over USB for best experience<br>
+//<br>
+//  Shows MOUSE activity and returned X and Y coordinates<br>
+//  You must click to get new X and Y<br>
+//<br>
+// Provided as-is, no warranties of any kind are provided :)<br>
+// by Pito 7/2017</code></p><code>
+<p>#include "Arduino.h"<br>
+#include "Tek.h"</p>
+<p>TEK tek;</p>
+<p>void setup() {<br>
+delay(3000);<br>
+Serial.begin(115200);<br>
+}</p>
+<p>void loop() {<br>
+uint32_t i = 0;<br>
+char b0, b1, b2, b3, b4;<br>
+uint16_t x = 0, y = 0, xo = 0, yo = 0;</p>
+<p>tek.Tekcls();<br>
+tek.Tekcolor(cyan);</p>
+</code><p><code>while (1) {<br>
+tek.Tekgin();<br>
+if (Serial.available() &gt; 0) b0 = Serial.read();<br>
+if (Serial.available() &gt; 0) b1 = Serial.read();<br>
+if (Serial.available() &gt; 0) b2 = Serial.read();<br>
+if (Serial.available() &gt; 0) b3 = Serial.read();<br>
+if (Serial.available() &gt; 0) b4 = Serial.read();<br>
+x = 32 * (b1 - 32) + (b2 - 32);<br>
+y = 32 * (b3 - 32) + (b4 - 32);<br>
+tek.Tekalpha();<br>
+tek.Tekfont(small);<br>
+tek.Tekcolor(cyan);<br>
+if ((x != xo) | (y != yo)) {<br>
+Serial.print(b0, HEX);  // KeyCode<br>
+Serial.print("   X=");<br>
+Serial.print(x);<br>
+Serial.print(" Y=");<br>
+Serial.print(y);<br>
+Serial.println();<br>
+xo = x;<br>
+yo = y;<br>
+i++;<br>
+}<br>
+delay(100);<br>
+if (i == 80) {<br>
+tek.Tekcls();<br>
+i = 0;<br>
+}<br>
+}<br>
+}<br>
+</code></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Mon Jul 24, 2017 10:28 pm
+</div>
+</div>
+<div class="posttext">Thanks Pito<p></p>
+<p>Can you tell me where it needs scientific notation text strings? </p>
+<p>Is this for the coordinates or purely for visual text?</p>
+<p>Also…<br>
+I think you said it does not do fills ??</p>
+<p>Is this because the original hardware was a vectior display?</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 10:39 pm
+</div>
+</div>
+<div class="posttext">@Roger, the scifi notation is needed only for printing out the results of user’s calculations, not for coordinates.<br>
+The coordinates are always integers, 0..4095 for x and y.<p></p>
+<p>The Tektronix 4010/4014 and others are basically very large oscilloscope tubes, with a very long afterglow.<br>
+The information painted into the phosphorus by the slim electron beam 
+lasted for an hour at least, unless you did clean screen, which took 
+about 1.5 seconds and the high voltage with the opposite polarity 
+cleaned the charge (causing the glow of the lines) off the screen 
+phosphorus.</p>
+<p>Tek is an X-Y Plotter. The screen is like a sheet of paper in an X-Y plotter. The pen’s tip is 1 pixel in diameter.<br>
+To fill a 300×300 large box with red color means to do 300 lines 300 pixels long.<br>
+Tek knows only a single graphical primitive – a line from (a,b) to (c,d).<br>
+In past the large surfaces where filled in with a gitter/mesh made of lines.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Mon Jul 24, 2017 10:44 pm
+</div>
+</div>
+<div class="posttext">Thanks for the info.<p></p>
+<p>I recall some early video games that also used vector displays. </p>
+<p>Perhaps we can have Asteriods <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_wink.gif" alt=";-)" title="Wink" width="15" height="17"></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Mon Jul 24, 2017 10:49 pm
+</div>
+</div>
+<div class="posttext">Another thought…<p></p>
+<p>Is there a python based TEK emulator?</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Mon Jul 24, 2017 10:59 pm
+</div>
+</div>
+<div class="posttext"><cite>I recall some early video games that also used vector displays.</cite><br>
+Not only games, but all graphical systems since 50ties till late 70ties 
+(CADs, military gadgets – radars, etc) were using these kind of vector 
+displays.<br>
+In order to get 4096×4096 “resolution” (even it was not exactly such) in
+ single color you would need 2Mbytes of video ram when talking a raster 
+mode. That amount of ram was quite expensive at that time.. <br>
+For example the Intel’s 3101 64-bits ram cost $99 in mid 1969, $40 in 1970.<br>
+And you needed only one single 3101 chip for the Tek4014 <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">stevestrong</div>
+<div class="date">Mon Jul 24, 2017 11:43 pm
+</div>
+</div>
+<div class="posttext">Regarding doing fills.<br>
+Maybe we can bring Tek to fill out a rectangle if we write a “space” 
+character with the desired color and dimension at the desired 
+coordinate.<br>
+Of course, this will only work for horizontally and vertically aligned fills.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Tue Jul 25, 2017 12:20 am
+</div>
+</div>
+<div class="posttext">BTW. I took a look for vector asteroids code<p></p>
+<p>I can’t find a definitive source but there is some interesting code in this blog</p>
+<p><a href="https://katyscode.wordpress.com/2012/06/13/coding-challenge-write-asteroids-in-10-hours-or-less/" class="postlink">https://katyscode.wordpress.com/2012/06 … s-or-less/</a></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Tue Jul 25, 2017 6:21 am
+</div>
+</div>
+<div class="posttext"><cite>Regarding doing fills.<br>
+Maybe we can bring Tek to fill out a rectangle if we write a “space” 
+character with the desired color and dimension at the desired 
+coordinate.<br>
+Of course, this will only work for horizontally and vertically aligned fills.</cite><p></p>
+<p>You can do “pseudo fills” if the screen resolutions fits.<br>
+You can see the result if you just install the GuiPittix-Library and run the <a href="https://github.com/ChrisMicro/GuiPittix/blob/master/examples/Led/Led.ino" class="postlink">LED-example with TEK-output</a>. <br>
+I make this library to have universal graphical elements on any display.
+ Probably I will start to make special vector graphics elements to 
+support this type of displays.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">zoomx</div>
+<div class="date">Tue Jul 25, 2017 6:34 am
+</div>
+</div>
+<div class="posttext">
+<blockquote>[<b>RogerClark</b> – Mon Jul 24, 2017 10:44 pm] –<br>
+I recall some early video games that also used vector displays. <p></p>
+<p>Perhaps we can have Asteriods <img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_wink.gif" alt=";-)" title="Wink" width="15" height="17">
+</p></blockquote>
+<p>I recall also Battle Tank and a two player game I don’t remember the 
+name. It was a battle between two battleship in a gravitational field.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Tue Jul 25, 2017 7:19 am
+</div>
+</div>
+<div class="posttext"><a href="https://en.wikipedia.org/wiki/Battlezone_%281980_video_game%29" class="postlink">https://en.wikipedia.org/wiki/Battlezon … ideo_game)</a><p></p>
+<p>was the tank one</p>
+<p>I vaguely recall playing something based on Star Trek, with a 
+“Enterprise” and “Kingon” ship  (while on a school trip, I think we went
+ to an arcade when we should have been doing something educational! and 
+they had some old game console machines )</p>
+<p>Possibly <br>
+<a href="http://davesclassicarcade.com/startrek/startrek.html" class="postlink">http://davesclassicarcade.com/startrek/startrek.html</a></p>
+<p><a href="https://en.wikipedia.org/wiki/Star_Trek_%28arcade_game%29" class="postlink">https://en.wikipedia.org/wiki/Star_Trek_(arcade_game)</a></p>
+<p>But the one I remember seemed to predate this, and from what I recall was more like asteroids, in that it was 2D plan view</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Tue Jul 25, 2017 7:26 am
+</div>
+</div>
+<div class="posttext">I found what appears to be a good list of vector games <p></p>
+<p><a href="http://wikivisually.com/wiki/Category:Vector_arcade_games" class="postlink">http://wikivisually.com/wiki/Category:V … cade_games</a></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Tue Jul 25, 2017 8:26 am
+</div>
+</div>
+<div class="posttext">Regarding fills: you may fill with solid lines – 
+the TT’s or Xterm’s side is fast enough, the bottleneck is the Serial 
+connectivity to the tek terminal. In order to fill ie. 300×300 box with 
+lines you need to send about 2700 bytes via serial, with current usb 
+speeds of say 200kB/sec it is something like 13msecs. So it is not so 
+“slow”. It would be slow when running Tek terminal via 9k6.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Tue Jul 25, 2017 8:53 am
+</div>
+</div>
+<div class="posttext">For example: the filling a 300×300 box with solid lines<br>
+<code>  uint32_t elapsed = micros();<br>
+for (i=100; i&lt;400; i++){<br>
+tek.Tekline(i,100,i,400);<br>
+}<br>
+elapsed = micros() - elapsed;</code></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Tue Jul 25, 2017 9:22 am
+</div>
+</div>
+<div class="posttext">While reading the TT’s source I can see there some interesting functionality regarding printing the texts.<br>
+You can set for example the text orientation, 0, 90, 180, 270 deg. That is great when drawing graphs and charts..</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">stevestrong</div>
+<div class="date">Tue Jul 25, 2017 9:39 am
+</div>
+</div>
+<div class="posttext">
+<blockquote>[<b>Pito</b> – Tue Jul 25, 2017 8:53 am] –<br>
+Btw, why such spread?? (2.897ms – 7.933ms).
+<p></p></blockquote>
+<p>I can only think on the host processing speed, the libmaple USB has a
+ 2kB Tx buffer, uses blocking Tx, and if the Tekline() command sends 
+more than 5 bytes, then the buffer gets full and will allow sending of 
+further bytes only if the host is reading some of previously sent ones.<br>
+So actually the ~3 ms is the time just to write the data to the Tx buffer.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">RogerClark</div>
+<div class="date">Tue Jul 25, 2017 9:57 am
+</div>
+</div>
+<div class="posttext">I don’t think its worthwhile doing fill’s with lines<p></p>
+<p>Its better to find a python TEK 4010 client and add a new command for fills</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Tue Jul 25, 2017 10:21 am
+</div>
+</div>
+<div class="posttext">
+<blockquote>[<b>stevestrong</b> – Tue Jul 25, 2017 9:39 am] –<br>
+So actually the ~3 ms is the time just to write the data to the Tx buffer.
+<p></p></blockquote>
+<p>Ok, the 8ms is the realistic time for filling the 300x300box..<br>
+That is not bad provided most of potential users may use the Tek 
+emulator for a visualization of their measurements done with their 
+..duinos in a form of simple 2D graphs/charts, with the option of having
+ easy copy/paste/saving/printing of their graphs. And without a need to 
+mess with windows programming.<br>
+I did not test with Xterm, but sources claim it works as well..</p>
+<p>PS: while I messed with the spectrum analyzer POC above, the lesson 
+learned is following: the data acquisition – sampling the ADC data – 
+takes much longer than the processing and plotting them in Tek window. 
+For example with 100kHz sampling rate, you need 10msecs to get 1024 
+samples in, you need to average the spectra in order to get some nice 
+results, I did with 64 spectra, thus the total time for data sampling 
+was 640ms. The actual fft processing of 64 spectra takes maybe 100 msecs
+ in total (fpu on). So the refresh rate of the spectra on the Tek screen
+ was below 1sec. The plotting the data took maybe 15msecs.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">zoomx</div>
+<div class="date">Tue Jul 25, 2017 12:09 pm
+</div>
+</div>
+<div class="posttext">Battle Zone! yes, long time ago. Searching in the 
+list I fond that the other game was Space Wars and I recalled another 
+one Star Castle but I remeber it in BW not in colour.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">stevestrong</div>
+<div class="date">Tue Jul 25, 2017 12:55 pm
+</div>
+</div>
+<div class="posttext">Starwars with Teensy: <a href="https://trmm.net/Starwars" class="postlink">https://trmm.net/Starwars</a><br>
+There is also a Processing demo: <a href="https://github.com/osresearch/vst/tree/master/processing/processingDemo" class="postlink">https://github.com/osresearch/vst/tree/ … essingDemo</a><p></p>
+<p><span style="text-decoration: underline"><span style="font-weight: bold">EDIT</span></span><br>
+Although this is not Tek but it is a Serial monitor to display graphics,
+ basically converting serial messages to graphical elements using 
+Processing.<br>
+Forum: <a href="https://forum.arduino.cc/index.php?topic=307293.0" class="postlink">https://forum.arduino.cc/index.php?topic=307293.0</a><br>
+Github: <a href="https://github.com/NardJ/HTMLSerialMonitor" class="postlink">https://github.com/NardJ/HTMLSerialMonitor</a><br>
+It looks very promising, worth to check whether it offers more 
+advantages (speed, definable graphical element diversity) than the Tek 
+emulator.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Tue Jul 25, 2017 2:33 pm
+</div>
+</div>
+<div class="posttext"><cite>Although this is not Tek but it is a Serial 
+monitor to display graphics, basically converting serial messages to 
+graphical elements using Processing.<br>
+Forum: <a href="https://forum.arduino.cc/index.php?topic=307293.0" class="postlink">https://forum.arduino.cc/index.php?topic=307293.0</a></cite><p></p>
+<p>This looks interesting. The question is: how fast is the display 
+update compared to the TEK? A fast update could be useful for 
+oscilloscope applications.</p>
+<p>@Pito<br>
+I just made a <a href="https://github.com/ChrisMicro/TekDisplayDriver" class="postlink">Arduino library on GitHub</a> out of it.</p>
+<p>What copyright do you have? Is GNU GPL 3 OK?</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">ChrisMicro</div>
+<div class="date">Fri Jul 28, 2017 6:06 am
+</div>
+</div>
+<div class="posttext">I have made a <a href="https://github.com/ChrisMicro/ArduinoOnPc/blob/master/src/examples/TekSpriteEditor2.ino" class="postlink">little sprite Editor</a> for the TEK display.<p></p>
+<p>Here are some sprites:<br>
+<cite>smile face<br>
+PFFDDDEEAAAIIHHHJJBBB DDPIAE DDDPHBDA BBBPAHBD HHAP</cite></p>
+<p>space ship<br>
+PEEAADEAAAAIHAAIIBBBBBBBBBBBBBB</p>
+<p>space invader1<br>
+PDEEFIAAAEJIIH DFPHHJ EPBBBBBIFDD APAHBD AAPAHBD DDDD</p>
+<p><img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tse_spaceinvader1.webp" class="postimage" alt="Image"></p>
+<p>@Pito<br>
+<span style="color: #FF0000">Still open question: What software license for your TEK functions?</span></p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">Pito</div>
+<div class="date">Thu Feb 01, 2018 1:04 pm
+</div>
+</div>
+<div class="posttext">That gnu gpl 3 is ok..<p></p>
+<p>BTW: would it be difficult to write a small app for Win for example:<br>
+1. a simple window, resizable, max 4096×4096<br>
+2. menu: comport settings, font type selection, paper/ink colors.<br>
+3. it will interpret the above tek commands..<br>
+I think it is a weekend project for somebody who knows-how<br>
+<img loading="lazy" class="smilies" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/icon_e_smile.gif" alt=":)" title="Smile" width="15" height="17"></p>
+<p>PS: in TeraTerm’s TEK the color n. 0 is the current “paper” color, and color n.7 is the current “ink” color.<br>
+The colors 1-6 are as it is defined in the library.</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">mrburnette</div>
+<div class="date">Thu Feb 01, 2018 1:20 pm
+</div>
+</div>
+<div class="posttext">
+<blockquote>[<b>Pito</b> – Thu Feb 01, 2018 1:04 pm] –<br>
+&lt;…&gt;<br>
+BTW: would it be difficult to write a small app for Win for example:
+<p></p></blockquote>
+<p>Would not <a href="https://processing.org/" class="postlink">Processing</a> be up to the task?</p>
+<p>There is also another Windows-only C++ compiler that I played with years ago: <a href="http://www.codecutter.net/tools/quincy/" class="postlink">Quincy</a><br>
+As I remember, it worked well with the Windows GUI.</p>
+<p>Ray</p></div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">arpruss</div>
+<div class="date">Mon Feb 05, 2018 1:49 pm
+</div>
+</div>
+<div class="posttext">An Android client would be really handy. Some 
+months back I started writing something similar for Android but using my
+ own hackish protocol. Tek4010 would have been better.</div>
+</div>
+<hr>
+<div class="forumpost">
+<div class="posttop">
+<div class="username">electrobling</div>
+<div class="date">Wed Feb 07, 2018 5:45 pm
+</div>
+</div>
+<div class="posttext">I had no idea this was going on! I rolled my own 
+demo a while back. It looks like my code is kind of redundant, except 
+for the use of the Hershey vector character set:<p></p>
+<p><a href="https://forum.arduino.cc/index.php?topic=523751.0" class="postlink">https://forum.arduino.cc/index.php?topic=523751.0</a></p>
+<p><img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/img_5de2a4cb4868a.png" class="postimage" alt="Image"></p></div>
+</div>
+<hr>
+                                        <div class="clear"></div>
+                
+                    <ul class="single-share">
+                    <li><a class="fbbutton fbc-has-badge fbc-UID_2" target="_blank" href="https://www.facebook.com/sharer/sharer.php?u=https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-facebook" aria-hidden="true"></i> <span>Share on Facebook</span></a></li>
+                    <li><a class="twbutton" target="_blank" href="https://twitter.com/home?status=Check%20out%20this%20article:%20TEK%204010/4014%20Vector%20Graphics%20terminal%20DEMO%20-%20https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-twitter"></i></a></li>
+                    <li><a class="pinbutton" target="_blank" href="https://pinterest.com/pin/create/button/?url=https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html&amp;media=&amp;description=TEK%204010/4014%20Vector%20Graphics%20terminal%20DEMO" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-pinterest"></i></a></li>
+                    <li><a class="googlebutton" target="_blank" href="https://plus.google.com/share?url=https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html" onclick="javascript:window.open(this.href, '', 'menubar=no,toolbar=no,resizable=yes,scrollbars=yes,height=400,width=700');return false;"><i class="fa fa-google-plus" aria-hidden="true"></i></a></li> 
+                    </ul><!-- end .single-share -->
+                </div><!-- end .entry -->
+                <div class="clear"></div> 
+            </div><!-- end #post -->
+                    </article><!-- end article -->
+   
+
+        <!-- Related Articles  -->    
+        <div id="related-wrap">
+            <div class="one_half_rw">
+                <div class="widget-title"><h3><i class="fa fa-paper-plane" aria-hidden="true"></i> New Posts</h3></div>
+                <ul class="article_list">
+                                                 
+                    <li>
+                                                <ul class="meta-icons-home">
+                                                        </ul><div class="clear"></div>      
+                          <a href="https://sparklogic.ru/working-ported-libraries/usb-mass-storage.html"> <img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/win10_screenshot-90x90.webp" class="attachment-list_mag_wp_thumbnail_widget_small size-list_mag_wp_thumbnail_widget_small wp-post-image" alt="usb Mass Storage" loading="lazy" srcset="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/win10_screenshot-90x90.webp 90w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/win10_screenshot-150x150.webp 150w" sizes="(max-width: 90px) 100vw, 90px" width="90" height="90"></a>
+                      <div class="author-il">
+                                              <h3><a href="https://sparklogic.ru/working-ported-libraries/usb-mass-storage.html">usb Mass Storage.</a></h3>
+                                              </div>
+                    </li>
+
+                                 
+                    <li>
+                                                <ul class="meta-icons-home">
+                                                        </ul><div class="clear"></div>      
+                          <a href="https://sparklogic.ru/working-ported-libraries/adafruit-ssd1306-plus-i2c-only.html"> <img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-90x90.webp" class="attachment-list_mag_wp_thumbnail_widget_small size-list_mag_wp_thumbnail_widget_small wp-post-image" alt="Adafruit_SSD1306_PLUS (I2c only)" loading="lazy" srcset="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-90x90.webp 90w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-150x150.webp 150w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-250x250.webp 250w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-300x300.webp 300w" sizes="(max-width: 90px) 100vw, 90px" width="90" height="90"></a>
+                      <div class="author-il">
+                                              <h3><a href="https://sparklogic.ru/working-ported-libraries/adafruit-ssd1306-plus-i2c-only.html">Adafruit_SSD1306_PLUS (I2c only)</a></h3>
+                                              </div>
+                    </li>
+
+                                 
+                    <li>
+                                                <ul class="meta-icons-home">
+                                                        </ul><div class="clear"></div>      
+                          <a href="https://sparklogic.ru/working-ported-libraries/timer-as-encoder.html"> <img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-90x90.webp" class="attachment-list_mag_wp_thumbnail_widget_small size-list_mag_wp_thumbnail_widget_small wp-post-image" alt="Timer as Encoder" loading="lazy" srcset="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-90x90.webp 90w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-150x150.webp 150w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-250x250.webp 250w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-300x300.webp 300w" sizes="(max-width: 90px) 100vw, 90px" width="90" height="90"></a>
+                      <div class="author-il">
+                                              <h3><a href="https://sparklogic.ru/working-ported-libraries/timer-as-encoder.html">Timer as Encoder</a></h3>
+                                              </div>
+                    </li>
+
+                                </ul>
+            </div>
+            <div class="one_half_last_rw">
+                <div class="widget-title"><h3><i class="fa fa-fire" aria-hidden="true"></i> Related Posts</h3></div>
+                <ul class="article_list">
+                                    
+                 
+                    <li>
+                                            <div class="author-il-full">
+                                              <h3><a href="https://sparklogic.ru/code-snipplets/fast-square-root-function-for-integers.html">Fast Square root function for integers.</a></h3>
+                                              </div>
+                    </li>
+
+                                    
+                 
+                    <li>
+                                            <div class="author-il-full">
+                                              <h3><a href="https://sparklogic.ru/code-snipplets/need-help-why-is-this-code-running-much-slower.html">Need help, Why is this code running much slower than Uno?</a></h3>
+                                              </div>
+                    </li>
+
+                                    
+                 
+                    <li>
+                                            <div class="author-il-full">
+                                              <h3><a href="https://sparklogic.ru/code-snipplets/snippet-optical-incremental-encoder-using-timer.html">[SNIPPET] Optical Incremental Encoder Using Timer Counter</a></h3>
+                                              </div>
+                    </li>
+
+                                </ul>
+            </div>
+            <div class="clear"></div>
+        </div><!-- end #related-wrap -->
+
+
+        <!-- Tags Articles -->
+        <div class="line_bottom_related"></div>
+        
+                <!-- Prev and Next articles -->
+        <div class="prev-articles">
+            <div class="one_half" style="text-align: right;">Previous Article  <br><h2><a href="https://sparklogic.ru/arduino-for-stm32/making-examples-easier-to-find.html" rel="prev">Making examples easier to find</a> </h2></div> 
+            <div class="one_half_last">Next Article <br> <h2> <a href="https://sparklogic.ru/custom-design-boards/custom-stm32f103c8t6.html" rel="next">Custom STM32F103C8T6</a></h2></div> 
+            <div class="clear"></div>
+        </div>
+        
+        <!-- Begin Sidebar (Left bottom) -->    
+        <aside class="sidebar-bottom">
+			
+		<div class="widget widget_recent_entries">
+		<h2 class="widgettitle">Recent Posts</h2>
+		<ul>
+											<li>
+					<a href="https://sparklogic.ru/working-ported-libraries/usb-mass-storage.html">usb Mass Storage.</a>
+									</li>
+											<li>
+					<a href="https://sparklogic.ru/working-ported-libraries/adafruit-ssd1306-plus-i2c-only.html">Adafruit_SSD1306_PLUS (I2c only)</a>
+									</li>
+											<li>
+					<a href="https://sparklogic.ru/working-ported-libraries/timer-as-encoder.html">Timer as Encoder</a>
+									</li>
+											<li>
+					<a href="https://sparklogic.ru/working-ported-libraries/libmaple-adafruit-mp3-native-decoding-with-f103xc.html">[libmaple]Adafruit MP3 native decoding with F103xC/D/E/F/G MCU</a>
+									</li>
+					</ul>
+
+		</div>	</aside>        <!-- end #sidebar (Left bottom) -->         
+
+        <!-- Comments -->
+        <div id="comments" class="comments">
+                        <div class="clear"></div>
+            
+
+ 
+	<div id="respond" class="comment-respond">
+		<h3 id="reply-title" class="comment-reply-title">Leave a Reply <small><a rel="nofollow" id="cancel-comment-reply-link" href="https://sparklogic.ru/code-snipplets/tek-4010-4014-vector-graphics-terminal-demo.html#respond" style="display:none;">Cancel reply</a></small></h3><form action="https://sparklogic.ru/wp-comments-post.php" method="post" id="commentform" class="comment-form"><p class="comment-notes"><span id="email-notes">Your email address will not be published.</span> Required fields are marked <span class="required">*</span></p><p class="comment-form-comment"><label for="comment">Comment</label> <textarea id="comment" name="comment" cols="45" rows="8" maxlength="65525" required="required"></textarea></p><p class="comment-form-author"><label for="author">Name <span class="required">*</span></label> <input id="author" name="author" type="text" size="30" maxlength="245" required="required"></p>
+<p class="comment-form-email"><label for="email">Email <span class="required">*</span></label> <input id="email" name="email" type="text" size="30" maxlength="100" aria-describedby="email-notes" required="required"></p>
+<p class="comment-form-url"><label for="url">Website</label> <input id="url" name="url" type="text" size="30" maxlength="200"></p>
+<p class="comment-form-cookies-consent"><input id="wp-comment-cookies-consent" name="wp-comment-cookies-consent" type="checkbox" value="yes"> <label for="wp-comment-cookies-consent">Save my name, email, and website in this browser for the next time I comment.</label></p>
+<p class="form-submit"><input name="submit" type="submit" id="submit" class="submit" value="Post Comment"> <input type="hidden" name="comment_post_ID" value="513" id="comment_post_ID">
+<input type="hidden" name="comment_parent" id="comment_parent" value="0">
+</p><p style="display: none;"><input type="hidden" id="akismet_comment_nonce" name="akismet_comment_nonce" value="08bd085b7d"></p><p style="display: none;"><input type="hidden" id="ak_js" name="ak_js" value="68"></p></form>	</div><!-- #respond -->
+	        </div>
+        <div class="clear"></div>
+    </div><!-- end .single-content -->
+
+
+    <!-- Begin Sidebar (right) -->    
+    <div class="sidebar-wrapper">
+<aside class="sidebar">
+		    <div class="widget_text widget widget_custom_html"><div class="textwidget custom-html-widget"><script async="" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/googlesyndication_adsbygoogle.js" crossorigin="anonymous"></script></div></div><div class="clear"></div>
+
+<div class="widget widget_list_mag_wp_recentposts"><div class="widget-title"><h3><i class="fa fa-bolt" aria-hidden="true"></i>Recent Posts</h3></div><div class="clear"></div>
+
+<ul class="article_list">
+ 
+    <li>
+                <ul class="meta-icons-home">
+                        </ul><div class="clear"></div>      
+          <a href="https://sparklogic.ru/working-ported-libraries/usb-mass-storage.html"> <img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/win10_screenshot-90x90.webp" class="attachment-list_mag_wp_thumbnail_widget_small size-list_mag_wp_thumbnail_widget_small wp-post-image" alt="usb Mass Storage" loading="lazy" srcset="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/win10_screenshot-90x90.webp 90w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/win10_screenshot-150x150.webp 150w" sizes="(max-width: 90px) 100vw, 90px" width="90" height="90"></a>
+      <div class="author-il">
+              <h3><a href="https://sparklogic.ru/working-ported-libraries/usb-mass-storage.html">usb Mass Storage.</a></h3>
+              </div>
+    </li>
+
+ 
+    <li>
+                <ul class="meta-icons-home">
+                        </ul><div class="clear"></div>      
+          <a href="https://sparklogic.ru/working-ported-libraries/adafruit-ssd1306-plus-i2c-only.html"> <img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-90x90.webp" class="attachment-list_mag_wp_thumbnail_widget_small size-list_mag_wp_thumbnail_widget_small wp-post-image" alt="Adafruit_SSD1306_PLUS (I2c only)" loading="lazy" srcset="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-90x90.webp 90w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-150x150.webp 150w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-250x250.webp 250w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/ssd1306-test-300x300.webp 300w" sizes="(max-width: 90px) 100vw, 90px" width="90" height="90"></a>
+      <div class="author-il">
+              <h3><a href="https://sparklogic.ru/working-ported-libraries/adafruit-ssd1306-plus-i2c-only.html">Adafruit_SSD1306_PLUS (I2c only)</a></h3>
+              </div>
+    </li>
+
+ 
+    <li>
+                <ul class="meta-icons-home">
+                        </ul><div class="clear"></div>      
+          <a href="https://sparklogic.ru/working-ported-libraries/timer-as-encoder.html"> <img src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-90x90.webp" class="attachment-list_mag_wp_thumbnail_widget_small size-list_mag_wp_thumbnail_widget_small wp-post-image" alt="Timer as Encoder" loading="lazy" srcset="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-90x90.webp 90w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-150x150.webp 150w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-250x250.webp 250w, TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/tim3-300x300.webp 300w" sizes="(max-width: 90px) 100vw, 90px" width="90" height="90"></a>
+      <div class="author-il">
+              <h3><a href="https://sparklogic.ru/working-ported-libraries/timer-as-encoder.html">Timer as Encoder</a></h3>
+              </div>
+    </li>
+
+ 
+    <li>
+            <div class="author-il-full">
+              <h3><a href="https://sparklogic.ru/working-ported-libraries/libmaple-adafruit-mp3-native-decoding-with-f103xc.html">[libmaple]Adafruit MP3 native decoding with F103xC/D/E/F/G MCU</a></h3>
+              </div>
+    </li>
+
+ 
+    <li>
+            <div class="author-il-full">
+              <h3><a href="https://sparklogic.ru/working-ported-libraries/new-sdfat-library-with-and-without-dma.html">New SdFat library (with and without DMA)</a></h3>
+              </div>
+    </li>
+
+</ul><div class="clear"></div>
+
+
+</div><div class="clear"></div> 
+
+
+		
+</aside>
+</div>    <!-- end #sidebar (right) --> 
+
+
+    <div class="clear"></div>
+</div><!-- end .wrap-fullwidth  -->
+<!-- Begin Footer -->
+<div class="clear"></div>
+<footer>
+    
+    <div class="wrap-footer">
+                  <p><span>Spark Logic</span></p>            </div><!-- end .wrap-middle -->
+
+
+
+	<p id="back-top"><a href="#top"><span></span></a></p>
+</footer><!-- end #footer -->
+
+<!-- Footer Theme output -->
+<style>
+			.atgfip_menu {display:flex; flex-direction:row; justify-content: center; background: #e7e7e7; margin:0; } 
+			.atgfip_menu li {list-style:none; margin:0 2px; border: 1px solid #cacaca; border-width:0 1px 0 0; padding: 2px 5px; } .atgfip_menu li:last-child { border:0px; }
+			</style><div class="menu-atgfip_menu-container"><ul id="menu-atgfip_menu" class="atgfip_menu _standard"><li id="menu-item-10091" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-10091"><a href="https://sparklogic.ru/info/privacy-policy">Privacy Policy</a></li>
+<li id="menu-item-10092" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-10092"><a href="https://sparklogic.ru/info/terms">Terms Of Use</a></li>
+<li id="menu-item-10093" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-10093"><a href="https://sparklogic.ru/info/about">About Us</a></li>
+<li id="menu-item-10094" class="menu-item menu-item-type-custom menu-item-object-custom menu-item-10094"><a href="https://sparklogic.ru/info/contact">Contact</a></li>
+</ul></div>	<script>jQuery(document).ready(function(){jQuery(".thumbs-rating-container").each(function(b){var a=jQuery(this).data("content-id");var c="thumbsrating"+a;if(localStorage.getItem(c)){if(localStorage.getItem("thumbsrating"+a+"-1")){jQuery(this).find(".thumbs-rating-up").addClass("thumbs-rating-voted")}if(localStorage.getItem("thumbsrating"+a+"-0")){jQuery(this).find(".thumbs-rating-down").addClass("thumbs-rating-voted")}}})});</script>
+	<script type="text/javascript" id="list_mag_wp_customjs-js-extra">
+/* <![CDATA[ */
+var list_mag_wp_js_custom = {"template_url":"https:\/\/sparklogic.ru\/wp-content\/themes\/sparklogic"};
+/* ]]> */
+</script>
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/custom.js" id="list_mag_wp_customjs-js"></script>
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/jquery.main.js" id="list_mag_wp_mainfiles-js"></script>
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/jquery.fancybox-1.3.4.pack.js" id="jquery-fancybox-js"></script>
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/comment-reply.min.js" id="comment-reply-js"></script>
+<script type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/wp-embed.min.js" id="wp-embed-js"></script>
+<script async="async" type="text/javascript" src="TEK%204010_4014%20Vector%20Graphics%20terminal%20DEMO%20-%20Spark%20Logic_files/form.html" id="akismet-form-js"></script>
+
+<div class="fbc-badge js-fbc-UID_1 fbc-badge-small fbc-badge-share-passive fbc-badge-share" style="z-index: 2; left: 454.5px; top: 105px;"><div class="fbc-badge-fence"></div><div class="fbc-badge-tooltip">If you click this button, Facebook will be able to track your visit to this site.</div><div class="fbc-badge-prompt"></div></div><div class="fbc-badge js-fbc-UID_2 fbc-badge-small fbc-badge-share-passive fbc-badge-share" style="z-index: 2; left: 454.5px; top: 23448.7px;"><div class="fbc-badge-fence"></div><div class="fbc-badge-tooltip">If you click this button, Facebook will be able to track your visit to this site.</div><div class="fbc-badge-prompt"></div></div></body></html>
+<!-- WP Fastest Cache file was created in 0.44648718833923 seconds, on 13-08-21 23:24:39 -->
+<!-- via php -->
