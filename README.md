@@ -29,4 +29,3 @@ Anyway, you'll figure it out.
 # output tabular data
 # later: plot casting cloth
 # later: plot rune X/Y position on cloth
-
